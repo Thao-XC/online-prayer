@@ -190,9 +190,16 @@ export class Nature {
   /** Cliff with a falling-water ribbon, plunge pool and mist (Nachi no Taki) */
   waterfall(h: number, w: number): THREE.Group {
     const g = new THREE.Group();
-    const cliff = new THREE.Mesh(new THREE.BoxGeometry(w * 6, h * 1.08, w * 2.5, 6, 12, 2), this.m.rock);
+    const cliffMat = new THREE.MeshStandardMaterial({ color: 0x4d5644, roughness: 1, flatShading: true });
+    const cliff = new THREE.Mesh(new THREE.BoxGeometry(w * 6, h * 1.08, w * 2.5, 10, 18, 3), cliffMat);
     const p = cliff.geometry.attributes.position;
-    for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) + (Math.sin(p.getY(i) * 0.3) + Math.cos(p.getX(i) * 0.5)) * 0.8);
+    const amp = Math.max(0.8, w * 0.35);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i);
+      const edge = Math.abs(x) / (w * 3); // ragged sides, smoother near the falling water
+      p.setZ(i, p.getZ(i) + (Math.sin(y * 0.21 + x * 0.3) + Math.cos(x * 0.43 - y * 0.17)) * amp * (0.4 + edge));
+      p.setX(i, x + Math.sin(y * 0.13 + x) * amp * 0.5 * edge);
+    }
     cliff.geometry.computeVertexNormals();
     cliff.position.set(0, h * 0.54, -w * 1.3);
     g.add(cliff);

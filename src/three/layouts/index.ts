@@ -11,6 +11,14 @@ import { iseJingu } from './iseJingu';
 import { izumoTaisha } from './izumoTaisha';
 import { todaiji } from './todaiji';
 import { dazaifuTenmangu } from './dazaifuTenmangu';
+import { hokkaidoJingu } from './hokkaidoJingu';
+import { kotohiraGu } from './kotohiraGu';
+import { kamakuraDaibutsu } from './kamakuraDaibutsu';
+import { zenkoji } from './zenkoji';
+import { chusonji } from './chusonji';
+import { atsutaJingu } from './atsutaJingu';
+import { kumanoNachi } from './kumanoNachi';
+import { naminoue } from './naminoue';
 
 /** One hand-built layout per shrine, keyed by shrine id */
 export const LAYOUTS: Record<string, Layout> = {
@@ -26,4 +34,12 @@ export const LAYOUTS: Record<string, Layout> = {
   'izumo-taisha': izumoTaisha,
   'todai-ji': todaiji,
   'dazaifu-tenmangu': dazaifuTenmangu,
+  'hokkaido-jingu': hokkaidoJingu,
+  'kotohira-gu': kotohiraGu,
+  'kamakura-daibutsu': kamakuraDaibutsu,
+  'zenko-ji': zenkoji,
+  'chuson-ji': chusonji,
+  'atsuta-jingu': atsutaJingu,
+  'kumano-nachi-taisha': kumanoNachi,
+  'naminoue-gu': naminoue,
 };
