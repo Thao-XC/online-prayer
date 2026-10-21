@@ -4,6 +4,12 @@ import { ShrineData, TimeOfDay } from '../types/shrine';
 import { createProceduralTextures, ShrineTextureLibrary } from './proceduralTextures';
 import { ShrineBuilder } from './ShrineBuilder';
 import { soundService } from '../services/soundService';
+import { createKitMaterials } from './kit/materials';
+import { Architecture } from './kit/architecture';
+import { Nature } from './kit/nature';
+import { LAYOUTS } from './layouts';
+import type { GroundFn, LayoutCtx, LayoutResult, ParticleKind } from './layouts/types';
+import type { ShrineSpot } from '../types/shrine';
 
 export interface SceneCallbacks {
   onNearSpot?: (spotId: string | null, spotName: string | null, spotType: string | null) => void;
@@ -33,6 +39,19 @@ export class ShrineScene {
   private petalParticles: THREE.Points | null = null;
   private smokeParticles: THREE.Points | null = null;
   private animatedBells: THREE.Mesh[] = [];
+
+  // Per-shrine layout state
+  private ground: GroundFn = () => 0;
+  private walkable: ((x: number, z: number) => boolean) | null = null;
+  private bounds = { x0: -28, x1: 28, z0: -24, z1: 38 };
+  private spots: ShrineSpot[] = [];
+  private orbit = { x: 0, z: -4, r: 28, y: 7 };
+  private smokeOrigin = new THREE.Vector3(0, 2.2, 4);
+  private fogMul = 1;
+  private particleKind: ParticleKind = 'sakura';
+  private waterBaseY = 0.4;
+  private nature: Nature | null = null;
+  private sunOffset = new THREE.Vector3(30, 45, 25);
 
   // Player & Navigation
   public playerPosition = new THREE.Vector3(0, 1.7, 30);
@@ -73,7 +92,7 @@ export class ShrineScene {
 
     // 2. Camera
     const aspect = container.clientWidth / container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, 1200);
     this.camera.position.set(0, 2.2, 34);
 
     // 3. Renderer with Three.js studio color pipeline
@@ -86,7 +105,7 @@ export class ShrineScene {
     this.renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = !isHeadless;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -109,8 +128,8 @@ export class ShrineScene {
     this.sunLight.shadow.mapSize.width = 2048;
     this.sunLight.shadow.mapSize.height = 2048;
     this.sunLight.shadow.camera.near = 5;
-    this.sunLight.shadow.camera.far = 130;
-    const d = 35;
+    this.sunLight.shadow.camera.far = 160;
+    const d = 45;
     this.sunLight.shadow.camera.left = -d;
     this.sunLight.shadow.camera.right = d;
     this.sunLight.shadow.camera.top = d;
@@ -118,6 +137,7 @@ export class ShrineScene {
     this.sunLight.shadow.bias = -0.0005;
     this.sunLight.shadow.normalBias = 0.02;
     this.scene.add(this.sunLight);
+    this.scene.add(this.sunLight.target);
 
     // 6. Textures & Builder
     this.textures = createProceduralTextures();
@@ -125,6 +145,7 @@ export class ShrineScene {
 
     // 7. Build Environment & Architecture
     this.buildWorld();
+    if (import.meta.env.DEV) (window as unknown as { __scene: ShrineScene }).__scene = this;
 
     // 8. Event Listeners
     this.bindEvents();
@@ -139,6 +160,146 @@ export class ShrineScene {
    * Constructs the authentic 3D environment for the selected shrine
    */
   private buildWorld() {
+    const layout = LAYOUTS[this.shrineData.id];
+    if (!layout) {
+      this.buildLegacyWorld();
+      this.spots = this.shrineData.spots;
+      return;
+    }
+    const m = createKitMaterials(this.textures);
+    const arch = new Architecture(m);
+    const nat = new Nature(m);
+    this.nature = nat;
+    const self = this;
+    const ctx: LayoutCtx = {
+      scene: this.scene,
+      arch,
+      nat,
+      m,
+      builder: this.builder,
+      get ground() {
+        return self.ground;
+      },
+      setGround: (fn) => (this.ground = fn),
+      add: (o, x = 0, z = 0, rotY = 0, y = 0) => {
+        o.position.set(x, this.ground(x, z) + y, z);
+        o.rotation.y = rotY;
+        o.traverse((c) => {
+          const mesh = c as THREE.Mesh;
+          if (mesh.isMesh) {
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+          }
+        });
+        this.scene.add(o);
+        return o;
+      },
+      terrain: (color, size = 360, seg = 150) => {
+        const geo = new THREE.PlaneGeometry(size, size, seg, seg);
+        geo.rotateX(-Math.PI / 2);
+        const p = geo.attributes.position;
+        const cols = new Float32Array(p.count * 3);
+        const base = new THREE.Color(color);
+        const tmp = new THREE.Color();
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i), z = p.getZ(i);
+          p.setY(i, this.ground(x, z) - 0.02);
+          const h = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+          const n = (h - Math.floor(h) - 0.5) * 0.07;
+          tmp.copy(base).offsetHSL(0, 0, n);
+          cols[i * 3] = tmp.r; cols[i * 3 + 1] = tmp.g; cols[i * 3 + 2] = tmp.b;
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+        return mesh;
+      },
+      water: (y, w, d, x = 0, z = 0, color) => {
+        const mat = m.water.clone();
+        if (color !== undefined) mat.color.set(color);
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(x, y, z);
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+        return mesh;
+      },
+      path: (pts, w, kind, lift = 0.05) => {
+        const pos: number[] = [];
+        const uv: number[] = [];
+        const idx: number[] = [];
+        let dist = 0;
+        const samples: [number, number][] = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+          const L = Math.hypot(bx - ax, bz - az);
+          const n = Math.max(1, Math.ceil(L / 1.0));
+          for (let k = 0; k < n; k++) samples.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
+        }
+        samples.push(pts[pts.length - 1]);
+        samples.forEach(([x, z], i) => {
+          const [px, pz] = samples[Math.max(0, i - 1)], [nx, nz] = samples[Math.min(samples.length - 1, i + 1)];
+          let dx = nx - px, dz = nz - pz;
+          const l = Math.hypot(dx, dz) || 1;
+          dx /= l; dz /= l;
+          const ox = -dz * (w / 2), oz = dx * (w / 2);
+          if (i > 0) dist += Math.hypot(x - samples[i - 1][0], z - samples[i - 1][1]);
+          pos.push(x + ox, this.ground(x + ox, z + oz) + lift, z + oz, x - ox, this.ground(x - ox, z - oz) + lift, z - oz);
+          uv.push(0, dist / w, 1, dist / w);
+          if (i > 0) {
+            const a = (i - 1) * 2;
+            idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+          }
+        });
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        geo.setIndex(idx);
+        geo.computeVertexNormals();
+        const mat =
+          kind === 'gravel' ? m.gravel : kind === 'paving' ? m.paving : kind === 'wood' ? m.wood.darkWood
+          : new THREE.MeshStandardMaterial({ color: 0x8a7558, roughness: 1 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+        return mesh;
+      },
+    };
+    const res: LayoutResult = layout(ctx);
+    this.applyLayout(res);
+  }
+
+  /** Apply what a layout returned: spawn, bounds, spot anchors, ambience */
+  private applyLayout(res: LayoutResult) {
+    this.walkable = res.walkable ?? null;
+    this.bounds = res.bounds;
+    this.fogMul = res.fog ?? 1;
+    this.particleKind = res.particles ?? 'none';
+    if (res.orbit) this.orbit = { y: 9, ...res.orbit };
+    if (res.smoke) {
+      this.smokeOrigin.set(res.smoke[0], res.smoke[1], res.smoke[2]);
+      this.createIncenseSmoke(res.smoke[0], res.smoke[1], res.smoke[2]);
+    }
+    if (res.bobbingWater) {
+      this.waterPlane = res.bobbingWater;
+      this.waterBaseY = res.bobbingWater.position.y;
+    }
+    this.spots = this.shrineData.spots.map((s) => {
+      const a = res.anchors[s.id] ?? res.anchors[s.type];
+      return a
+        ? { ...s, position: [a.at[0], 0, a.at[1]] as [number, number, number], cameraTarget: [a.look[0], 2, a.look[1]] as [number, number, number] }
+        : s;
+    });
+    this.createParticles(this.particleKind);
+    this.playerPosition.set(res.spawn.x, 1.7 + this.ground(res.spawn.x, res.spawn.z), res.spawn.z);
+    this.playerRotationY = res.spawn.rotY;
+    this.setTimeOfDay('day');
+  }
+
+  /** Previous one-size-fits-all world, kept only until every shrine has a layout */
+  private buildLegacyWorld() {
     const style = this.shrineData.architectureStyle;
     const isFloating = style === 'itsukushima_floating';
 
@@ -397,18 +558,31 @@ export class ShrineScene {
    * Falling Sakura Petals Particle System
    */
   private createFallingPetals() {
-    const petalCount = 450;
+    this.createParticles('sakura');
+  }
+
+  private createParticles(kind: ParticleKind) {
+    if (kind === 'none') return;
+    const look: Record<Exclude<ParticleKind, 'none'>, { color: number; size: number; count: number; fall: number }> = {
+      sakura: { color: 0xffb3c6, size: 0.28, count: 450, fall: 0.5 },
+      plum: { color: 0xfff0f4, size: 0.24, count: 300, fall: 0.45 },
+      maple: { color: 0xd2452a, size: 0.36, count: 260, fall: 0.7 },
+      ginkgo: { color: 0xf0c84a, size: 0.34, count: 260, fall: 0.65 },
+      snow: { color: 0xffffff, size: 0.2, count: 900, fall: 0.9 },
+    };
+    const cfg = look[kind];
+    const petalCount = cfg.count;
     const geom = new THREE.BufferGeometry();
     const positions = new Float32Array(petalCount * 3);
     const velocities = new Float32Array(petalCount * 3);
 
     for (let i = 0; i < petalCount; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 60;
-      positions[i * 3 + 1] = Math.random() * 18 + 0.5;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+      positions[i * 3] = this.playerPosition.x + (Math.random() - 0.5) * 60;
+      positions[i * 3 + 1] = this.playerPosition.y + Math.random() * 18 - 1;
+      positions[i * 3 + 2] = this.playerPosition.z + (Math.random() - 0.5) * 60;
 
       velocities[i * 3] = Math.sin(i) * 0.4 + 0.2; // drift x
-      velocities[i * 3 + 1] = -(0.4 + Math.random() * 0.6); // fall y
+      velocities[i * 3 + 1] = -(cfg.fall * (0.8 + Math.random() * 0.8)); // fall y
       velocities[i * 3 + 2] = Math.cos(i) * 0.3; // drift z
     }
 
@@ -416,10 +590,10 @@ export class ShrineScene {
     geom.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
 
     const mat = new THREE.PointsMaterial({
-      color: 0xffb3c6,
-      size: 0.28,
+      color: cfg.color,
+      size: cfg.size,
       transparent: true,
-      opacity: 0.85,
+      opacity: kind === 'snow' ? 0.95 : 0.85,
     });
 
     this.petalParticles = new THREE.Points(geom, mat);
@@ -462,11 +636,11 @@ export class ShrineScene {
     if (time === 'day') {
       this.scene.background = new THREE.Color(0xbfe0f0);
       (this.scene.fog as THREE.FogExp2).color.set(0xbfe0f0);
-      (this.scene.fog as THREE.FogExp2).density = 0.012;
+      (this.scene.fog as THREE.FogExp2).density = 0.012 * this.fogMul;
 
       this.sunLight.color.set(0xfffaed);
       this.sunLight.intensity = 2.0;
-      this.sunLight.position.set(30, 45, 25);
+      this.sunOffset.set(30, 45, 25);
 
       this.hemiLight.color.set(0xfff6ea);
       this.hemiLight.groundColor.set(0x829ca8);
@@ -479,11 +653,11 @@ export class ShrineScene {
     } else if (time === 'twilight') {
       this.scene.background = new THREE.Color(0xf69d62);
       (this.scene.fog as THREE.FogExp2).color.set(0xf69d62);
-      (this.scene.fog as THREE.FogExp2).density = 0.016;
+      (this.scene.fog as THREE.FogExp2).density = 0.016 * this.fogMul;
 
       this.sunLight.color.set(0xff7733);
       this.sunLight.intensity = 1.4;
-      this.sunLight.position.set(45, 16, 20);
+      this.sunOffset.set(45, 16, 20);
 
       this.hemiLight.color.set(0xffaa77);
       this.hemiLight.groundColor.set(0x553344);
@@ -497,11 +671,11 @@ export class ShrineScene {
       // Night (Yozora)
       this.scene.background = new THREE.Color(0x0c1220);
       (this.scene.fog as THREE.FogExp2).color.set(0x0c1220);
-      (this.scene.fog as THREE.FogExp2).density = 0.018;
+      (this.scene.fog as THREE.FogExp2).density = 0.018 * this.fogMul;
 
       this.sunLight.color.set(0x6688cc); // Moon light
       this.sunLight.intensity = 0.45;
-      this.sunLight.position.set(-25, 40, -15);
+      this.sunOffset.set(-25, 40, -15);
 
       this.hemiLight.color.set(0x223355);
       this.hemiLight.groundColor.set(0x080c14);
@@ -518,10 +692,10 @@ export class ShrineScene {
    * Teleport smoothly to one of the key spots (Torii, Temizuya, Haiden, Ema, etc.)
    */
   public teleportToSpot(spotId: string) {
-    const spot = this.shrineData.spots.find((s) => s.id === spotId);
+    const spot = this.spots.find((s) => s.id === spotId);
     if (!spot) return;
 
-    this.playerPosition.set(spot.position[0], 1.7, spot.position[2]);
+    this.playerPosition.set(spot.position[0], 1.7 + this.ground(spot.position[0], spot.position[2]), spot.position[2]);
     // Calculate rotation facing spot target
     const dx = spot.cameraTarget[0] - spot.position[0];
     const dz = spot.cameraTarget[2] - spot.position[2];
@@ -613,6 +787,13 @@ export class ShrineScene {
 
     this.updatePlayerMovement(delta);
     this.updateParticles(delta);
+    if (this.nature) {
+      const t = now / 1000;
+      this.nature.animated.forEach((a) => a.update(t));
+    }
+    // keep the shadow-casting sun centred on the visitor, so big sites still get shadows
+    this.sunLight.target.position.copy(this.playerPosition);
+    this.sunLight.position.copy(this.playerPosition).add(this.sunOffset);
     this.updateLightingCycle(delta);
     this.checkNearbySpots();
 
@@ -627,15 +808,19 @@ export class ShrineScene {
     if (this.isCinematicMode) {
       // Cinematic auto-tour orbit
       this.cinematicTime += delta * 0.25;
-      const radius = 28;
-      const cx = Math.sin(this.cinematicTime) * radius;
-      const cz = Math.cos(this.cinematicTime) * radius - 4;
-      const cy = 7 + Math.sin(this.cinematicTime * 2) * 2.5;
+      const o = this.orbit;
+      const cx = o.x + Math.sin(this.cinematicTime) * o.r;
+      const cz = o.z + Math.cos(this.cinematicTime) * o.r;
+      const gy = this.ground(o.x, o.z);
+      const cy = gy + o.y + Math.sin(this.cinematicTime * 2) * 2.5;
 
       this.camera.position.set(cx, cy, cz);
-      this.camera.lookAt(0, 2.5, -4);
+      this.camera.lookAt(o.x, gy + 3, o.z);
       return;
     }
+
+    const prevX = this.playerPosition.x;
+    const prevZ = this.playerPosition.z;
 
     // Direction vectors
     const moveSpeed = (this.keysPressed['ShiftLeft'] || this.keysPressed['ShiftRight'] ? 9.0 : 4.5) * delta;
@@ -675,10 +860,22 @@ export class ShrineScene {
       soundService.playFootstep();
     }
 
-    // Constrain player within sanctuary bounds
-    this.playerPosition.x = Math.max(-28, Math.min(28, this.playerPosition.x));
-    this.playerPosition.z = Math.max(-24, Math.min(38, this.playerPosition.z));
-    this.playerPosition.y = 1.7; // Head height
+    // Constrain player within the site, and off water / out of ponds
+    const b = this.bounds;
+    this.playerPosition.x = Math.max(b.x0, Math.min(b.x1, this.playerPosition.x));
+    this.playerPosition.z = Math.max(b.z0, Math.min(b.z1, this.playerPosition.z));
+    if (this.walkable && !this.walkable(this.playerPosition.x, this.playerPosition.z)) {
+      // try sliding along one axis before giving up
+      if (this.walkable(this.playerPosition.x, prevZ)) this.playerPosition.z = prevZ;
+      else if (this.walkable(prevX, this.playerPosition.z)) this.playerPosition.x = prevX;
+      else {
+        this.playerPosition.x = prevX;
+        this.playerPosition.z = prevZ;
+      }
+    }
+    // follow the ground (stairs, slopes, bridges) with a little smoothing
+    const targetY = 1.7 + this.ground(this.playerPosition.x, this.playerPosition.z);
+    this.playerPosition.y += (targetY - this.playerPosition.y) * Math.min(1, delta * 12);
 
     // Smooth camera update
     this.camera.position.copy(this.playerPosition);
@@ -708,10 +905,10 @@ export class ShrineScene {
         positions[i * 3 + 2] += velocities[i * 3 + 2] * delta;
 
         // Reset if hit ground or out of bounds
-        if (positions[i * 3 + 1] < 0.1) {
-          positions[i * 3 + 1] = 16 + Math.random() * 4;
-          positions[i * 3] = (Math.random() - 0.5) * 50;
-          positions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+        if (positions[i * 3 + 1] < this.playerPosition.y - 2) {
+          positions[i * 3 + 1] = this.playerPosition.y + 14 + Math.random() * 4;
+          positions[i * 3] = this.playerPosition.x + (Math.random() - 0.5) * 50;
+          positions[i * 3 + 2] = this.playerPosition.z + (Math.random() - 0.5) * 50;
         }
       }
       posAttr.needsUpdate = true;
@@ -726,10 +923,10 @@ export class ShrineScene {
         positions[i * 3 + 1] += delta * 0.9;
         positions[i * 3] += Math.sin(positions[i * 3 + 1] * 4 + i) * delta * 0.15;
 
-        if (positions[i * 3 + 1] > 5.5) {
-          positions[i * 3 + 1] = 2.2;
-          positions[i * 3] = 0 + (Math.random() - 0.5) * 0.4;
-          positions[i * 3 + 2] = 4 + (Math.random() - 0.5) * 0.4;
+        if (positions[i * 3 + 1] > this.smokeOrigin.y + 3.3) {
+          positions[i * 3 + 1] = this.smokeOrigin.y;
+          positions[i * 3] = this.smokeOrigin.x + (Math.random() - 0.5) * 0.4;
+          positions[i * 3 + 2] = this.smokeOrigin.z + (Math.random() - 0.5) * 0.4;
         }
       }
       posAttr.needsUpdate = true;
@@ -737,7 +934,7 @@ export class ShrineScene {
 
     // Water ripple effect for Itsukushima
     if (this.waterPlane) {
-      this.waterPlane.position.y = 0.4 + Math.sin(performance.now() * 0.0018) * 0.04;
+      this.waterPlane.position.y = this.waterBaseY + Math.sin(performance.now() * 0.0018) * 0.04;
     }
   }
 
@@ -765,9 +962,8 @@ export class ShrineScene {
     let nearestSpot: { id: string; name: string; type: string } | null = null;
     let minDist = 4.8; // Interaction trigger radius
 
-    for (const spot of this.shrineData.spots) {
-      this._vec3.set(spot.position[0], 1.7, spot.position[2]);
-      const dist = this.playerPosition.distanceTo(this._vec3);
+    for (const spot of this.spots) {
+      const dist = Math.hypot(this.playerPosition.x - spot.position[0], this.playerPosition.z - spot.position[2]);
       if (dist < minDist) {
         minDist = dist;
         nearestSpot = { id: spot.id, name: spot.name, type: spot.type };

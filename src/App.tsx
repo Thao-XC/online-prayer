@@ -22,8 +22,17 @@ import {
 import { Map, Volume2, VolumeX, Sparkles, BookOpen, Flame } from 'lucide-react';
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<'map' | 'explore'>('map');
-  const [currentShrine, setCurrentShrine] = useState<ShrineData>(SHRINES[0]);
+  // Deep link: ?shrine=<id> opens that shrine straight in 3D
+  const linkedShrine = (() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get('shrine');
+      return SHRINES.find((s) => s.id === id) ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const [viewMode, setViewMode] = useState<'map' | 'explore'>(linkedShrine ? 'explore' : 'map');
+  const [currentShrine, setCurrentShrine] = useState<ShrineData>(linkedShrine ?? SHRINES[0]);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
   const [isCinematic, setIsCinematic] = useState(false);
   const [isAutoCycle, setIsAutoCycle] = useState(false);
