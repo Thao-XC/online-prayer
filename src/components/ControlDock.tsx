@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShrineData, ShrineSpot, TimeOfDay } from '../types/shrine';
 import {
-  Map,
   Droplets,
   Coins,
   Scroll,
@@ -13,11 +12,8 @@ import {
   Video,
   ChevronDown,
   ChevronUp,
-  Volume2,
-  VolumeX,
   Compass,
   Sparkles,
-  Flame,
 } from 'lucide-react';
 
 interface ControlDockProps {
@@ -32,6 +28,7 @@ interface ControlDockProps {
   onOpenOmikuji: () => void;
   onOpenEma: () => void;
   onOpenGoshuin: () => void;
+  onOpenOmamori?: () => void;
   onOpenMikoDialogue: () => void;
   onOpenDailyPilgrimage: () => void;
   dailyProgress: { completed: number; total: number; streak: number };
@@ -41,6 +38,8 @@ interface ControlDockProps {
   isAutoCycle: boolean;
   onToggleAutoCycle: () => void;
   currentNearbySpot: { id: string; name: string; type: string } | null;
+  children?: React.ReactNode;
+  onBow?: () => void;
 }
 
 export const ControlDock: React.FC<ControlDockProps> = ({
@@ -55,6 +54,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   onOpenOmikuji,
   onOpenEma,
   onOpenGoshuin,
+  onOpenOmamori,
   onOpenMikoDialogue,
   onOpenDailyPilgrimage,
   dailyProgress,
@@ -64,6 +64,8 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   isAutoCycle,
   onToggleAutoCycle,
   currentNearbySpot,
+  children,
+  onBow,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'rituals' | 'teleport' | 'environment'>('rituals');
@@ -81,210 +83,205 @@ export const ControlDock: React.FC<ControlDockProps> = ({
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 transition-transform duration-300 pointer-events-auto"
+      className="fixed bottom-2 sm:bottom-4 left-1/2 z-40 transition-transform duration-300 pointer-events-auto"
       style={{
-        maxWidth: 'min(980px, 96vw)',
-        width: '100%',
+        width: 'max-content',
+        maxWidth: 'min(980px, calc(100vw - 16px))',
         transform: isCollapsed
           ? 'translateX(-50%) translateY(calc(100% - 36px))'
           : 'translateX(-50%) translateY(0)',
       }}
     >
+      {/* Proximity prompt rides just above the dock, so it never covers it */}
+      {children && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap">{children}</div>
+      )}
+
       {/* Collapse/Expand Toggle Tab */}
       <div className="flex justify-center">
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex items-center gap-1.5 px-4 py-1 rounded-t-xl bg-stone-900/90 border-t border-x border-stone-700/70 text-xs font-medium text-stone-300 hover:text-stone-100 transition-colors shadow-lg cursor-pointer"
+          className="flex items-center gap-1.5 px-4 py-1 rounded-t-xl bg-[#fbf7ef]/95 border-t border-x border-[#d8c8ae] text-xs font-medium text-[#4a3c2e] hover:text-[#2c241c] transition-colors shadow-lg cursor-pointer"
         >
           {isCollapsed ? (
             <>
-              <ChevronUp className="w-3.5 h-3.5 text-amber-400" />
-              <span>Show Controls (H)</span>
+              <ChevronUp className="w-3.5 h-3.5 text-[#b45309]" />
+              <span>Show controls<span className="pointer-coarse:hidden"> (H)</span></span>
             </>
           ) : (
             <>
-              <ChevronDown className="w-3.5 h-3.5 text-amber-400" />
-              <span>Zen / Fullscreen Mode (H)</span>
+              <ChevronDown className="w-3.5 h-3.5 text-[#b45309]" />
+              <span>Hide controls<span className="pointer-coarse:hidden"> (H)</span></span>
             </>
           )}
         </button>
       </div>
 
       {/* Main Consolidated Glassmorphic Dock Container */}
-      <div className="bg-stone-900/95 border border-amber-900/40 rounded-2xl shadow-2xl p-3 sm:p-4 text-stone-100 backdrop-blur-md">
-        {/* Top Dock Bar: Shrine Badge, Tabs, and Quick Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-stone-800/80">
-          {/* Shrine Title & Nearby Indicator */}
-          <div className="flex items-center gap-2">
-            <span className="font-kanji font-bold text-amber-300 text-sm">
-              {shrine.kanjiName}
-            </span>
-            <span className="text-xs text-stone-400 font-cinzel hidden sm:inline">
-              • {shrine.name}
-            </span>
-            {currentNearbySpot && (
-              <span className="text-[11px] bg-red-950/70 border border-red-600/50 text-red-300 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                <Compass className="w-3 h-3 text-red-400" />
-                Near: {currentNearbySpot.name.split('(')[0]}
-              </span>
-            )}
-          </div>
-
-          {/* Dock Category Tabs */}
-          <div className="flex items-center gap-1 bg-stone-950/80 p-1 rounded-xl border border-stone-800">
+      <div className="bg-[#fbf7ef]/95 border border-[#d8c8ae] rounded-2xl shadow-2xl p-3 sm:p-4 text-[#2c241c] backdrop-blur-md shadow-[0_8px_30px_rgba(44,36,28,0.18)]">
+        {/* Tabs + where you are */}
+        <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-[#e3d6c0]">
+          <div className="flex items-center gap-1 bg-[#f1e8d7] p-1 rounded-xl border border-[#e3d6c0]">
             <button
               onClick={() => setActiveTab('rituals')}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                 activeTab === 'rituals'
-                  ? 'bg-amber-600 text-stone-950 font-semibold'
-                  : 'text-stone-400 hover:text-stone-200'
+                  ? 'bg-[#b91c1c] text-white font-semibold'
+                  : 'text-[#6d5b49] hover:text-[#2c241c]'
               }`}
             >
-              Rituals & AI (作法)
+              <span className="sm:hidden">Rituals</span>
+              <span className="hidden sm:inline">Rituals & Guide</span>
             </button>
             <button
               onClick={() => setActiveTab('teleport')}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                 activeTab === 'teleport'
-                  ? 'bg-amber-600 text-stone-950 font-semibold'
-                  : 'text-stone-400 hover:text-stone-200'
+                  ? 'bg-[#b91c1c] text-white font-semibold'
+                  : 'text-[#6d5b49] hover:text-[#2c241c]'
               }`}
             >
-              Teleport (境内)
+              <span className="sm:hidden">Teleport</span>
+              <span className="hidden sm:inline">Teleport</span>
             </button>
             <button
               onClick={() => setActiveTab('environment')}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                 activeTab === 'environment'
-                  ? 'bg-amber-600 text-stone-950 font-semibold'
-                  : 'text-stone-400 hover:text-stone-200'
+                  ? 'bg-[#b91c1c] text-white font-semibold'
+                  : 'text-[#6d5b49] hover:text-[#2c241c]'
               }`}
             >
-              Time & Camera
+              <span className="sm:hidden">Time</span>
+              <span className="hidden sm:inline">Time & Camera</span>
             </button>
           </div>
 
-          {/* Right Fixed Utilities */}
-          <div className="flex items-center gap-1.5">
+          {onBow && (
             <button
-              onClick={onOpenDailyPilgrimage}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-red-950/70 to-amber-950/70 hover:from-red-900/70 hover:to-amber-900/70 text-amber-200 text-xs font-medium border border-amber-600/50 transition-colors cursor-pointer"
-              title="Daily Pilgrimage Missions"
+              onClick={onBow}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fbeedd] hover:bg-[#f6dfc0] border border-[#d6b98c] text-[#7c2d12] text-xs font-semibold cursor-pointer shrink-0"
+              title="Bow (B)"
             >
-              <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span className="font-mono text-[10px] bg-amber-950/80 px-1 py-0.5 rounded">
-                {dailyProgress.completed}/{dailyProgress.total}
-              </span>
+              <span aria-hidden>🙇</span>
+              <span>Bow</span>
+              <span className="hidden sm:inline pointer-coarse:hidden text-[10px] text-[#b45309] font-mono">B</span>
             </button>
-            <button
-              onClick={onToggleSound}
-              className="p-1.5 rounded-lg bg-stone-800/80 hover:bg-stone-700 text-stone-300 transition-colors"
-              title="Toggle Audio"
-            >
-              {isMuted ? <VolumeX className="w-4 h-4 text-stone-500" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
-            </button>
-            <button
-              onClick={onReturnToMap}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-800/80 hover:bg-stone-700 text-stone-200 text-xs font-medium border border-stone-700 transition-colors cursor-pointer"
-              title="Return to Japan Map"
-            >
-              <Map className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Map</span>
-            </button>
-          </div>
+          )}
+          {currentNearbySpot && (
+            <span className="hidden sm:flex text-[11px] bg-[#fdecea] border border-[#e8b4a8] text-[#b91c1c] px-2 py-0.5 rounded-full font-medium items-center gap-1 truncate max-w-[220px]">
+              <Compass className="w-3 h-3 text-[#b91c1c] shrink-0" />
+              <span className="truncate">Near: {currentNearbySpot.name.split('(')[0]}</span>
+            </span>
+          )}
         </div>
 
         {/* Tab 1: Interactive Shrine Rituals & AI Guide */}
         {activeTab === 'rituals' && (
-          <div className="pt-2.5 grid grid-cols-2 sm:grid-cols-6 gap-2">
+          <div className="pt-2.5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&>button]:shrink-0 pr-6 sm:pr-0 [mask-image:linear-gradient(to_right,black_82%,transparent)] sm:[mask-image:none]">
             {/* AI Guide Dialogue Button */}
             <button
               onClick={onOpenMikoDialogue}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-800 hover:border-amber-500/70 bg-gradient-to-br from-amber-950/40 to-stone-950 text-left transition-all cursor-pointer flex items-center gap-2 group shadow-sm ring-1 ring-amber-500/20"
+              className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-amber-500/70 bg-gradient-to-br from-[#fbeedd] to-[#fffcf6] text-left transition-all cursor-pointer flex items-center gap-2 group shadow-sm ring-1 ring-amber-500/20"
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-800 to-amber-700 border border-amber-400/40 text-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform text-sm shadow">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-800 to-amber-700 border border-amber-400/40 text-[#7c2d12] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform text-sm shadow">
                 {shrine.type === 'temple' ? '🧘' : '⛩️'}
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-amber-200 group-hover:text-amber-100 flex items-center gap-1">
+                <div className="text-xs font-semibold text-[#7c2d12] group-hover:text-[#7c2d12] flex items-center gap-1">
                   <span>{shrine.type === 'temple' ? 'Zen Monk' : 'Miko Sakura'}</span>
                 </div>
-                <div className="text-[10px] text-amber-400/80 font-kanji">神託・対話</div>
+                <div className="text-[10px] text-[#b45309]/80 font-kanji">神託・対話</div>
               </div>
             </button>
 
             <button
               onClick={onOpenTemizuya}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-800 hover:border-cyan-500/50 bg-stone-950/60 hover:bg-cyan-950/20 text-left transition-all cursor-pointer flex items-center gap-2 group"
+              className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-cyan-500/50 bg-[#fffcf6] hover:bg-[#eef7f8] text-left transition-all cursor-pointer flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/30 text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-[#e3f1f2] border border-cyan-500/30 text-[#0e7490] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Droplets className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-stone-200 group-hover:text-cyan-300">
+                <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#0e7490]">
                   Temizuya
                 </div>
-                <div className="text-[10px] text-stone-400 font-kanji">手水舎で清める</div>
+                <div className="text-[10px] text-[#6d5b49] font-kanji">手水舎で清める</div>
               </div>
             </button>
 
             <button
               onClick={onOpenSaisen}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-800 hover:border-amber-500/50 bg-stone-950/60 hover:bg-amber-950/20 text-left transition-all cursor-pointer flex items-center gap-2 group"
+              className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-amber-500/50 bg-[#fffcf6] hover:bg-[#fdf4e7] text-left transition-all cursor-pointer flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-lg bg-amber-950/80 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-[#fbeedd] border border-amber-500/30 text-[#b45309] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Coins className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-stone-200 group-hover:text-amber-300">
+                <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#9a3412]">
                   Worship & Pray
                 </div>
-                <div className="text-[10px] text-stone-400 font-kanji">二礼二拍手一礼</div>
+                <div className="text-[10px] text-[#6d5b49] font-kanji">二礼二拍手一礼</div>
               </div>
             </button>
 
             <button
               onClick={onOpenOmikuji}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-800 hover:border-red-500/50 bg-stone-950/60 hover:bg-red-950/20 text-left transition-all cursor-pointer flex items-center gap-2 group"
+              className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-red-500/50 bg-[#fffcf6] hover:bg-[#fdf1ef] text-left transition-all cursor-pointer flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-lg bg-red-950/80 border border-red-500/30 text-red-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-[#fdecea] border border-red-500/30 text-[#b91c1c] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Scroll className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-stone-200 group-hover:text-red-300">
+                <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#b91c1c]">
                   Draw Omikuji
                 </div>
-                <div className="text-[10px] text-stone-400 font-kanji">神託おみくじ</div>
+                <div className="text-[10px] text-[#6d5b49] font-kanji">神託おみくじ</div>
               </div>
             </button>
 
             <button
               onClick={onOpenEma}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-800 hover:border-amber-600/50 bg-stone-950/60 hover:bg-amber-950/20 text-left transition-all cursor-pointer flex items-center gap-2 group"
+              className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-amber-600/50 bg-[#fffcf6] hover:bg-[#fdf4e7] text-left transition-all cursor-pointer flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-lg bg-amber-950/80 border border-amber-600/30 text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-[#fbeedd] border border-amber-600/30 text-[#b45309] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <PenTool className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-stone-200 group-hover:text-amber-300">
+                <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#9a3412]">
                   Hang Ema
                 </div>
-                <div className="text-[10px] text-stone-400 font-kanji">絵馬を奉納する</div>
+                <div className="text-[10px] text-[#6d5b49] font-kanji">絵馬を奉納する</div>
               </div>
             </button>
 
+            {onOpenOmamori && (
+              <button
+                onClick={onOpenOmamori}
+                className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-[#d9577f]/60 bg-[#fffcf6] hover:bg-[#fdf1f4] text-left transition-all cursor-pointer flex items-center gap-2 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#fdecf1] border border-[#e8a8bc] text-[#c2416b] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform font-kanji text-sm font-bold">
+                  守
+                </div>
+                <div className="truncate">
+                  <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#c2416b]">Omamori</div>
+                  <div className="text-[10px] text-[#6d5b49] font-kanji">御守・縁結び</div>
+                </div>
+              </button>
+            )}
+
             <button
               onClick={onOpenGoshuin}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-800 hover:border-rose-500/50 bg-stone-950/60 hover:bg-rose-950/20 text-left transition-all cursor-pointer flex items-center gap-2 group"
+              className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-rose-500/50 bg-[#fffcf6] hover:bg-rose-50 text-left transition-all cursor-pointer flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-lg bg-rose-950/80 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-500/30 text-rose-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <BookOpen className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-stone-200 group-hover:text-rose-300">
+                <div className="text-xs font-semibold text-[#2c241c] group-hover:text-rose-700">
                   Goshuinchō
                 </div>
-                <div className="text-[10px] text-stone-400 font-kanji">御朱印帳を開く</div>
+                <div className="text-[10px] text-[#6d5b49] font-kanji">御朱印帳を開く</div>
               </div>
             </button>
           </div>
@@ -292,16 +289,16 @@ export const ControlDock: React.FC<ControlDockProps> = ({
 
         {/* Tab 2: Fast Teleport to Spots */}
         {activeTab === 'teleport' && (
-          <div className="pt-2.5 flex flex-wrap gap-2">
+          <div className="pt-2.5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&>button]:shrink-0 max-w-[900px] pr-6 sm:pr-0 [mask-image:linear-gradient(to_right,black_82%,transparent)] sm:[mask-image:none]">
             {shrine.spots.map((spot) => (
               <button
                 key={spot.id}
                 onClick={() => onTeleport(spot.id)}
-                className="px-3 py-2 rounded-xl bg-stone-950/70 border border-stone-800 hover:border-amber-500/60 hover:bg-amber-950/20 text-xs text-stone-200 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-[#fffcf6] border border-[#e3d6c0] hover:border-amber-500/60 hover:bg-[#fdf4e7] text-xs text-[#2c241c] transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                <span className="text-amber-400">📍</span>
+                <span className="text-[#b45309]">📍</span>
                 <span>{spot.name.split('(')[0]}</span>
-                <span className="text-[10px] text-stone-400 font-kanji">
+                <span className="text-[10px] text-[#6d5b49] font-kanji">
                   {spot.japaneseName}
                 </span>
               </button>
@@ -314,14 +311,14 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           <div className="pt-2.5 flex flex-wrap items-center justify-between gap-3">
             {/* Time of Day Swatches */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-stone-400 font-medium">Lighting / Sky:</span>
-              <div className="flex items-center gap-1.5 bg-stone-950/80 p-1 rounded-xl border border-stone-800">
+              <span className="text-xs text-[#6d5b49] font-medium">Lighting / Sky:</span>
+              <div className="flex items-center gap-1.5 bg-[#f1e8d7] p-1 rounded-xl border border-[#e3d6c0]">
                 <button
                   onClick={() => onTimeOfDayChange('day')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                     timeOfDay === 'day'
-                      ? 'bg-amber-500 text-stone-950 font-bold'
-                      : 'text-stone-400 hover:text-stone-200'
+                      ? 'bg-[#b45309] text-white font-bold'
+                      : 'text-[#6d5b49] hover:text-[#2c241c]'
                   }`}
                 >
                   <Sun className="w-3.5 h-3.5" />
@@ -331,8 +328,8 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                   onClick={() => onTimeOfDayChange('twilight')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                     timeOfDay === 'twilight'
-                      ? 'bg-amber-600 text-stone-950 font-bold'
-                      : 'text-stone-400 hover:text-stone-200'
+                      ? 'bg-[#b91c1c] text-white font-bold'
+                      : 'text-[#6d5b49] hover:text-[#2c241c]'
                   }`}
                 >
                   <Sunset className="w-3.5 h-3.5" />
@@ -342,8 +339,8 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                   onClick={() => onTimeOfDayChange('night')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                     timeOfDay === 'night'
-                      ? 'bg-indigo-600 text-stone-100 font-bold'
-                      : 'text-stone-400 hover:text-stone-200'
+                      ? 'bg-indigo-600 text-[#2c241c] font-bold'
+                      : 'text-[#6d5b49] hover:text-[#2c241c]'
                   }`}
                 >
                   <Moon className="w-3.5 h-3.5" />
@@ -358,11 +355,11 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 onClick={onToggleAutoCycle}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                   isAutoCycle
-                    ? 'bg-amber-600 text-stone-950 border-amber-400 font-bold shadow'
-                    : 'bg-stone-950 border-stone-800 text-stone-300 hover:border-stone-700'
+                    ? 'bg-[#b91c1c] text-white border-amber-400 font-bold shadow'
+                    : 'bg-[#fffcf6] border-[#e3d6c0] text-[#4a3c2e] hover:border-[#d8c8ae]'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <Sparkles className="w-3.5 h-3.5 text-[#9a3412]" />
                 <span>{isAutoCycle ? 'Auto Day/Night: ON' : 'Auto Day/Night Cycle'}</span>
               </button>
 
@@ -371,8 +368,8 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 onClick={onToggleCinematic}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                   isCinematic
-                    ? 'bg-red-700 text-white border-red-500 shadow-lg'
-                    : 'bg-stone-950 border-stone-800 text-stone-300 hover:border-stone-700'
+                    ? 'bg-[#b91c1c] text-white border-[#b91c1c] shadow-lg'
+                    : 'bg-[#fffcf6] border-[#e3d6c0] text-[#4a3c2e] hover:border-[#d8c8ae]'
                 }`}
               >
                 <Video className="w-4 h-4" />

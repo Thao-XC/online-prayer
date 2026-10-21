@@ -70,6 +70,104 @@ class SoundService {
   /**
    * Buddhist Bonshō Temple Gong: Deep, meditative bronze bell with rich harmonic resonance
    */
+  /** Filtered noise burst — the building block for thunder, splashes and rumbles */
+  private noise(dur: number, freq: number, q: number, vol: number, attack = 0.01, type: BiquadFilterType = 'lowpass') {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.setValueAtTime(freq, now);
+    f.Q.setValueAtTime(q, now);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(vol, now + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(f);
+    f.connect(g);
+    g.connect(ctx.destination);
+    src.start(now);
+  }
+
+  /** Thunder: sharp crack, then a long rolling rumble */
+  public playThunder() {
+    this.noise(0.4, 2400, 0.7, 0.5, 0.005, 'highpass');
+    setTimeout(() => this.noise(3.5, 180, 0.8, 0.7, 0.15), 120);
+  }
+
+  /** Deep underwater / stone rumble */
+  public playRumble(seconds = 2.5) {
+    this.noise(seconds, 90, 1.2, 0.6, 0.4);
+  }
+
+  /** Splash as you go into the water */
+  public playSplash() {
+    this.noise(0.9, 1200, 0.6, 0.45, 0.01, 'bandpass');
+    this.noise(1.6, 400, 0.6, 0.25, 0.05);
+  }
+
+  /** Rooster crow: a rising-falling sawtooth with vibrato */
+  public playRooster() {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.linearRampToValueAtTime(880, now + 0.25);
+    osc.frequency.setValueAtTime(880, now + 0.7);
+    osc.frequency.linearRampToValueAtTime(600, now + 1.2);
+    lfo.frequency.setValueAtTime(28, now);
+    lfoGain.gain.setValueAtTime(25, now);
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(1400, now);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.12, now + 0.05);
+    g.gain.setValueAtTime(0.12, now + 1.0);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 1.3);
+    osc.connect(f);
+    f.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now);
+    lfo.start(now);
+    osc.stop(now + 1.35);
+    lfo.stop(now + 1.35);
+  }
+
+  /** Two notes up for gaining luck, two down for losing it */
+  public playLuck(up: boolean) {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    (up ? [784, 1175] : [392, 311]).forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = up ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+      g.gain.setValueAtTime(0, now + i * 0.12);
+      g.gain.linearRampToValueAtTime(0.12, now + i * 0.12 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.6);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.65);
+    });
+  }
+
   public playTempleGong() {
     if (this.isMuted) return;
     const ctx = this.initContext();

@@ -2,6 +2,8 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { SHRINES } from '../data/shrinesData';
 import { ShrineData, ShrineType } from '../types/shrine';
 import { soundService } from '../services/soundService';
+import { LuckChip } from './LuckAndLegends';
+import { MAP_W, MAP_H, JAPAN_MAINLAND_PATH, OKINAWA_INSET, GRATICULE, MAP_LABELS } from '../data/japanGeo';
 import {
   MapPin,
   Volume2,
@@ -40,6 +42,7 @@ interface JapanMapPickerProps {
   onOpenGoshuin: () => void;
   goshuinCount: number;
   onOpenDailyPilgrimage: () => void;
+  onOpenLuck?: () => void;
   dailyProgress: { completed: number; total: number; streak: number };
 }
 
@@ -55,32 +58,29 @@ type RegionFilter =
   | 'Hokkaido'
   | 'Okinawa';
 
-interface RegionViewPreset {
-  zoom: number;
-  panX: number;
-  panY: number;
-  name: string;
-  kanji: string;
-}
-
-const REGION_PRESETS: Record<RegionFilter, RegionViewPreset> = {
-  all: { zoom: 1.0, panX: 0, panY: 0, name: 'All Japan', kanji: '全国' },
-  Kanto: { zoom: 2.4, panX: -180, panY: 30, name: 'Kanto (Tokyo/Nikko)', kanji: '関東' },
-  Kansai: { zoom: 2.6, panX: -10, panY: -60, name: 'Kansai (Kyoto/Nara/Mie)', kanji: '関西' },
-  Chubu: { zoom: 2.3, panX: -60, panY: 30, name: 'Chubu (Nagano/Nagoya)', kanji: '中部' },
-  Tohoku: { zoom: 2.3, panX: -240, panY: 260, name: 'Tohoku (Hiraizumi)', kanji: '東北' },
-  Chugoku: { zoom: 2.4, panX: 190, panY: -30, name: 'Chugoku (Hiroshima/Izumo)', kanji: '中国' },
-  Shikoku: { zoom: 2.6, panX: 140, panY: -110, name: 'Shikoku (Sanuki)', kanji: '四国' },
-  Kyushu: { zoom: 2.4, panX: 360, panY: -90, name: 'Kyushu (Fukuoka)', kanji: '九州' },
-  Hokkaido: { zoom: 2.0, panX: -320, panY: 480, name: 'Hokkaido (Sapporo)', kanji: '北海道' },
-  Okinawa: { zoom: 2.8, panX: 520, panY: -480, name: 'Okinawa (Naha)', kanji: '沖縄' },
+const REGION_PRESETS: Record<RegionFilter, { name: string; kanji: string }> = {
+  all: { name: 'All Japan', kanji: '全国' },
+  Kanto: { name: 'Kanto (Tokyo/Nikko)', kanji: '関東' },
+  Kansai: { name: 'Kansai (Kyoto/Nara/Mie)', kanji: '関西' },
+  Chubu: { name: 'Chubu (Nagano/Nagoya)', kanji: '中部' },
+  Tohoku: { name: 'Tohoku (Hiraizumi)', kanji: '東北' },
+  Chugoku: { name: 'Chugoku (Hiroshima/Izumo)', kanji: '中国' },
+  Shikoku: { name: 'Shikoku (Sanuki)', kanji: '四国' },
+  Kyushu: { name: 'Kyushu (Fukuoka)', kanji: '九州' },
+  Hokkaido: { name: 'Hokkaido (Sapporo)', kanji: '北海道' },
+  Okinawa: { name: 'Okinawa (Naha)', kanji: '沖縄' },
 };
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 5;
+const clampZoom = (z: number) => Math.min(Math.max(Number(z.toFixed(2)), MIN_ZOOM), MAX_ZOOM);
 
 export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   onSelectShrine,
   onOpenGoshuin,
   goshuinCount,
   onOpenDailyPilgrimage,
+  onOpenLuck,
   dailyProgress,
 }) => {
   const [selectedId, setSelectedId] = useState<string>(SHRINES[0].id);
@@ -103,6 +103,18 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const initialPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const mapViewportRef = useRef<HTMLDivElement>(null);
+  const mapBoxRef = useRef<HTMLDivElement>(null);
+  const [mapBoxWidth, setMapBoxWidth] = useState(900);
+
+  // Track the rendered (un-zoomed) width of the map box so pin spacing can be computed in screen pixels
+  useEffect(() => {
+    const el = mapBoxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setMapBoxWidth(el.offsetWidth || 900));
+    ro.observe(el);
+    setMapBoxWidth(el.offsetWidth || 900);
+    return () => ro.disconnect();
+  }, [viewMode]);
   const touchDistanceRef = useRef<number | null>(null);
 
   const selectedShrine = useMemo(() => {
@@ -161,17 +173,43 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
     }
   };
 
-  const centerOnShrine = (shrine: ShrineData) => {
-    const targetZoom = Math.max(zoomLevel, 2.2);
-    // Center point of map is at 50%, 50%
-    const targetX = (50 - shrine.mapCoords.x) * 9 * (targetZoom / 1.5);
-    const targetY = (50 - shrine.mapCoords.y) * 6.5 * (targetZoom / 1.5);
+  // Pan offset (screen px) that puts a point given in map % at the viewport centre for a given zoom
+  const panToCenter = (xPct: number, yPct: number, zoom: number) => {
+    const box = mapBoxRef.current;
+    const bw = box?.offsetWidth ?? 900;
+    const bh = box?.offsetHeight ?? 650;
+    return {
+      x: -zoom * (xPct / 100 - 0.5) * bw,
+      y: -zoom * (yPct / 100 - 0.5) * bh,
+    };
+  };
 
+  const centerOnShrine = (shrine: ShrineData) => {
+    const targetZoom = clampZoom(Math.max(zoomLevel, 2.6));
     setZoomLevel(targetZoom);
-    setPanOffset({
-      x: Math.min(Math.max(targetX, -800), 800),
-      y: Math.min(Math.max(targetY, -600), 600),
-    });
+    setPanOffset(panToCenter(shrine.mapCoords.x, shrine.mapCoords.y, targetZoom));
+  };
+
+  // Zoom/pan so every listed shrine fits comfortably in view
+  const fitToShrines = (list: ShrineData[]) => {
+    if (list.length === 0 || list.length === SHRINES.length) {
+      setZoomLevel(1);
+      setPanOffset({ x: 0, y: 0 });
+      return;
+    }
+    const xs = list.map((s) => s.mapCoords.x);
+    const ys = list.map((s) => s.mapCoords.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const vp = mapViewportRef.current;
+    const box = mapBoxRef.current;
+    const vw = vp?.clientWidth ?? 900, vh = vp?.clientHeight ?? 650;
+    const bw = box?.offsetWidth ?? 900, bh = box?.offsetHeight ?? 650;
+    const spanW = Math.max(((maxX - minX) / 100) * bw, 1);
+    const spanH = Math.max(((maxY - minY) / 100) * bh, 1);
+    const zoom = clampZoom(Math.min((vw * 0.55) / spanW, (vh * 0.55) / spanH, 3.2));
+    setZoomLevel(zoom);
+    setPanOffset(panToCenter((minX + maxX) / 2, (minY + maxY) / 2, zoom));
   };
 
   const handleEnterWorld = (shrine: ShrineData) => {
@@ -181,16 +219,20 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
   const handleSelectRegionPreset = (region: RegionFilter) => {
     setRegionFilter(region);
-    const preset = REGION_PRESETS[region];
-    setZoomLevel(preset.zoom);
-    setPanOffset({ x: preset.panX, y: preset.panY });
+    const inRegion =
+      region === 'all'
+        ? SHRINES
+        : region === 'Okinawa'
+        ? SHRINES.filter((s) => s.prefecture.toLowerCase().includes('okinawa'))
+        : SHRINES.filter((s) => s.region === region);
+    fitToShrines(inRegion);
     soundService.playFootstep();
   };
 
   // Zoom towards a specific point (mouse cursor or center)
   const zoomAroundPoint = useCallback(
     (nextZoom: number, clientX?: number, clientY?: number) => {
-      const clampedZoom = Math.min(Math.max(Number(nextZoom.toFixed(2)), 0.9), 3.8);
+      const clampedZoom = clampZoom(nextZoom);
       if (clampedZoom === zoomLevel) return;
 
       if (clientX !== undefined && clientY !== undefined && mapViewportRef.current) {
@@ -204,8 +246,8 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
         setZoomLevel(clampedZoom);
         setPanOffset({
-          x: Math.min(Math.max(newPanX, -700 * clampedZoom), 700 * clampedZoom),
-          y: Math.min(Math.max(newPanY, -500 * clampedZoom), 500 * clampedZoom),
+          x: clampedZoom === 1 ? 0 : newPanX,
+          y: clampedZoom === 1 ? 0 : newPanY,
         });
       } else {
         setZoomLevel(clampedZoom);
@@ -216,18 +258,13 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
   // Zoom controls
   const handleZoomIn = () => {
-    zoomAroundPoint(zoomLevel + 0.35);
+    zoomAroundPoint(zoomLevel * 1.35);
     soundService.playFootstep();
   };
 
   const handleZoomOut = () => {
-    zoomAroundPoint(zoomLevel - 0.35);
+    zoomAroundPoint(zoomLevel / 1.35);
     soundService.playFootstep();
-  };
-
-  const handleSetZoomSlider = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    zoomAroundPoint(val);
   };
 
   const handleResetZoom = () => {
@@ -253,8 +290,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomDelta = e.deltaY < 0 ? 0.2 : -0.2;
-      const targetZoom = Math.min(Math.max(zoomLevel + zoomDelta, 0.9), 3.8);
+      const targetZoom = clampZoom(zoomLevel * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
       zoomAroundPoint(targetZoom, e.clientX, e.clientY);
     };
 
@@ -301,7 +337,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   // Double click on map to zoom in
   const handleDoubleClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
-    zoomAroundPoint(zoomLevel + 0.5, e.clientX, e.clientY);
+    zoomAroundPoint(zoomLevel * 1.6, e.clientX, e.clientY);
   };
 
   // Mouse drag handlers for panning (1:1 screen pixel tracking)
@@ -360,7 +396,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
       );
       const factor = dist / touchDistanceRef.current;
       if (Math.abs(factor - 1) > 0.04) {
-        const next = Math.min(Math.max(zoomLevel * factor, 0.9), 3.8);
+        const next = clampZoom(zoomLevel * factor);
         setZoomLevel(Number(next.toFixed(2)));
         touchDistanceRef.current = dist;
       }
@@ -372,10 +408,70 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
     touchDistanceRef.current = null;
   };
 
-  // Calculate inverse pin scale so markers remain readable, compact, and never bloat or overlap into messy clumps
-  const pinCounterScale = useMemo(() => {
-    return Math.max(0.48, Math.min(1.0, 1.0 / Math.pow(zoomLevel, 0.65)));
-  }, [zoomLevel]);
+  // Pins keep a constant on-screen size whatever the zoom (a bit smaller when the map itself is small)
+  const pinSize = mapBoxWidth < 600 ? 0.72 : 1;
+  const pinCounterScale = pinSize / zoomLevel;
+
+  // Pin layout in viewBox units. Pins that would overlap on screen (e.g. three Kyoto temples)
+  // are gently fanned apart; a leader line points back to the true spot. Spacing is in screen px,
+  // so as you zoom in the pins settle back onto their exact locations.
+  const pinLayout = useMemo(() => {
+    const unitsPerPx = MAP_W / (mapBoxWidth * zoomLevel);
+    const minDist = 30 * pinSize * unitsPerPx;
+    const pts = filteredShrines.map((shrine) => {
+      const tx = (shrine.mapCoords.x / 100) * MAP_W;
+      const ty = (shrine.mapCoords.y / 100) * MAP_H;
+      return { shrine, trueX: tx, trueY: ty, x: tx, y: ty };
+    });
+    for (let iter = 0; iter < 40; iter++) {
+      let moved = false;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          let dx = pts[j].x - pts[i].x;
+          let dy = pts[j].y - pts[i].y;
+          let d = Math.hypot(dx, dy);
+          if (d >= minDist) continue;
+          if (d < 1e-6) {
+            const ang = (i * 2.399 + j) % (Math.PI * 2);
+            dx = Math.cos(ang); dy = Math.sin(ang); d = 1;
+          }
+          const push = (minDist - d) / 2;
+          pts[i].x -= (dx / d) * push; pts[i].y -= (dy / d) * push;
+          pts[j].x += (dx / d) * push; pts[j].y += (dy / d) * push;
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+    // Labels: when zoomed in, show as many as fit without overlapping (selected first).
+    const pxPerUnit = 1 / unitsPerPx;
+    const placed: { l: number; r: number; t: number; b: number; id?: string }[] = pts.map((p) => {
+      const r = 14 * pinSize;
+      const cx = p.x / unitsPerPx, cy = p.y / unitsPerPx;
+      return { l: cx - r, r: cx + r, t: cy - r, b: cy + r, id: p.shrine.id };
+    });
+    const labelled = new Set<string>();
+    if (zoomLevel >= 1.8) {
+      const order = [...pts].sort((a, b) =>
+        a.shrine.id === selectedId ? -1 : b.shrine.id === selectedId ? 1 : 0
+      );
+      for (const p of order) {
+        const kanji = p.shrine.kanjiName.split('（')[0];
+        const latin = p.shrine.name.split('(')[0];
+        const w = kanji.length * 12 + (mapBoxWidth < 600 ? 0 : latin.length * 5.6) + 24;
+        const cx = p.x * pxPerUnit, top = p.y * pxPerUnit - 16 * pinSize - 6 - 20;
+        const box = { l: cx - w / 2, r: cx + w / 2, t: top, b: top + 20 };
+        if (placed.some((q) => q.id !== p.shrine.id && box.l < q.r && box.r > q.l && box.t < q.b && box.b > q.t)) continue;
+        placed.push(box);
+        labelled.add(p.shrine.id);
+      }
+    }
+    return pts.map((p) => ({
+      ...p,
+      displaced: Math.hypot(p.x - p.trueX, p.y - p.trueY) > 3 * unitsPerPx,
+      labelFits: labelled.has(p.shrine.id),
+    }));
+  }, [filteredShrines, zoomLevel, mapBoxWidth, selectedId, pinSize]);
 
   return (
     <div className="relative w-full h-screen bg-[#f7f2e7] text-[#2c241c] flex flex-col overflow-hidden select-none font-sans">
@@ -385,11 +481,11 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
       {/* Top Header Bar - Warm Beige Aesthetic with Japanese Accents */}
       <header className="relative z-20 flex items-center justify-between px-3 sm:px-6 py-2 border-b border-[#ded2bd] bg-[#fbf8f1]/95 backdrop-blur-md shadow-xs">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#b91c1c] via-[#c2410c] to-[#991b1b] border border-[#f59e0b]/50 flex items-center justify-center text-xl shadow-md text-white">
             ⛩️
           </div>
-          <div>
+          <div className="hidden sm:block">
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-xl font-cinzel font-bold tracking-wider text-[#241c14]">
                 Online Prayer
@@ -397,7 +493,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               <span className="text-xs font-kanji text-[#9a3412] font-semibold border border-[#ea580c]/30 px-2 py-0.5 rounded-full bg-[#ffedd5]/70 hidden sm:inline-block">
                 日本名社寺巡礼
               </span>
-              <span className="text-[11px] font-mono bg-[#fef2f2] text-[#b91c1c] font-bold border border-[#fca5a5] px-2 py-0.5 rounded-full shadow-xs">
+              <span className="text-[11px] font-mono bg-[#fef2f2] text-[#b91c1c] font-bold border border-[#fca5a5] px-2 py-0.5 rounded-full shadow-xs hidden sm:inline">
                 {SHRINES.length} Sacred Sanctuaries
               </span>
             </div>
@@ -434,6 +530,8 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               <span className="hidden md:inline">Directory ({SHRINES.length})</span>
             </button>
           </div>
+
+          {onOpenLuck && <LuckChip onClick={onOpenLuck} compact />}
 
           {/* Daily Pilgrimage Mission Button */}
           <button
@@ -474,14 +572,20 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
       </header>
 
       {/* Main Content Area: Map / Directory + Details Sidebar */}
-      <main className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+      <main
+        className={`relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-1 overflow-hidden ${
+          (isMapExpanded && viewMode === 'map') || viewMode === 'directory'
+            ? 'grid-rows-1'
+            : 'grid-rows-[minmax(0,55fr)_minmax(0,45fr)]'
+        }`}
+      >
         {/* Left Column: Interactive Detailed Japan Map OR Sanctuary Directory */}
         <div
           className={`${
             viewMode === 'directory' || !isMapExpanded
               ? 'lg:col-span-7 xl:col-span-8'
               : 'lg:col-span-12'
-          } p-3 sm:p-4 flex flex-col justify-between overflow-hidden relative transition-all duration-300`}
+          } p-3 sm:p-4 flex flex-col justify-between overflow-hidden relative transition-all duration-300 min-h-0`}
         >
           {/* Top Control Bar: Search, Type Filter, Region Jump Pills & Fullscreen Toggle */}
           <div className="space-y-2 mb-2 shrink-0">
@@ -592,174 +696,68 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              className={`relative flex-1 bg-[#f4ece0] border border-[#d8c8b0] rounded-2xl overflow-hidden min-h-[420px] shadow-inner select-none ${
+              className={`relative flex-1 bg-[#f4ece0] border border-[#d8c8b0] rounded-2xl overflow-hidden min-h-[160px] lg:min-h-[420px] shadow-inner select-none touch-none ${
                 isDragging ? 'cursor-grabbing' : 'cursor-grab'
               }`}
             >
-              {/* TOP-RIGHT ULTRA-CONVENIENT ZOOM & NAVIGATION DOCK */}
-              <div className="absolute top-3 right-3 z-30 flex flex-col items-center gap-1.5 bg-[#fcf9f3]/95 p-2 rounded-2xl border border-[#d3c2a9] shadow-xl backdrop-blur-md">
-                {/* Primary Large Zoom In Button */}
-                <button
-                  onClick={handleZoomIn}
-                  className="w-9 h-9 rounded-xl bg-[#f5ede0] hover:bg-[#ebdcc4] active:scale-95 text-[#2c241c] flex items-center justify-center font-bold transition-all border border-[#decbb0] shadow-xs cursor-pointer"
-                  title="Zoom In (Key: + or Scroll Up)"
-                >
-                  <ZoomIn className="w-4 h-4 text-[#b91c1c]" />
+              {/* Map controls: zoom in / out, fit all, centre on selected */}
+              <div className="absolute top-3 right-3 z-30 flex flex-col rounded-xl bg-[#fcf9f3]/95 border border-[#d3c2a9] shadow-md backdrop-blur-md overflow-hidden divide-y divide-[#e6d9c4]">
+                <button onClick={handleZoomIn} className="w-9 h-9 flex items-center justify-center text-[#5a4837] hover:bg-[#f0e6d4] active:bg-[#e8dcc6] transition-colors cursor-pointer" title="Zoom in (+)" aria-label="Zoom in">
+                  <ZoomIn className="w-4 h-4" />
                 </button>
-
-                {/* Percentage Readout */}
-                <div className="px-2 py-0.5 rounded-lg bg-[#eee3cf] border border-[#d6c4aa] text-[11px] font-mono font-bold text-[#68533e]">
-                  {Math.round(zoomLevel * 100)}%
-                </div>
-
-                {/* Primary Large Zoom Out Button */}
-                <button
-                  onClick={handleZoomOut}
-                  className="w-9 h-9 rounded-xl bg-[#f5ede0] hover:bg-[#ebdcc4] active:scale-95 text-[#2c241c] flex items-center justify-center font-bold transition-all border border-[#decbb0] shadow-xs cursor-pointer"
-                  title="Zoom Out (Key: - or Scroll Down)"
-                >
-                  <ZoomOut className="w-4 h-4 text-[#b91c1c]" />
+                <button onClick={handleZoomOut} className="w-9 h-9 flex items-center justify-center text-[#5a4837] hover:bg-[#f0e6d4] active:bg-[#e8dcc6] transition-colors cursor-pointer" title="Zoom out (−)" aria-label="Zoom out">
+                  <ZoomOut className="w-4 h-4" />
                 </button>
-
-                <div className="w-full h-px bg-[#ded0ba] my-1" />
-
-                {/* Vertical Slider for Instant Smooth Zooming */}
-                <div className="h-20 flex items-center justify-center py-1">
-                  <input
-                    type="range"
-                    min="0.9"
-                    max="3.8"
-                    step="0.05"
-                    value={zoomLevel}
-                    onChange={handleSetZoomSlider}
-                    className="accent-[#b91c1c] w-18 h-1.5 rotate-270 cursor-pointer"
-                    title="Drag to zoom smoothly"
-                  />
-                </div>
-
-                <div className="w-full h-px bg-[#ded0ba] my-1" />
-
-                {/* Quick 1-Click Zoom Steps */}
-                <div className="flex flex-col gap-1 w-full">
-                  {[
-                    { label: 'Fit', val: 1.0 },
-                    { label: '1.5x', val: 1.5 },
-                    { label: '2.5x', val: 2.5 },
-                  ].map((step) => (
-                    <button
-                      key={step.label}
-                      onClick={() => zoomAroundPoint(step.val)}
-                      className={`px-1 py-0.5 rounded text-[10px] font-mono font-bold transition-colors cursor-pointer text-center ${
-                        Math.abs(zoomLevel - step.val) < 0.2
-                          ? 'bg-[#b91c1c] text-white'
-                          : 'bg-[#f5ede0] hover:bg-[#ebdcc4] text-[#554637]'
-                      }`}
-                    >
-                      {step.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="w-full h-px bg-[#ded0ba] my-1" />
-
-                {/* Recenter & Fit All Button */}
-                <button
-                  onClick={handleResetZoom}
-                  className="w-9 h-9 rounded-xl bg-[#f5ede0] hover:bg-[#ebdcc4] active:scale-95 text-[#2c241c] flex items-center justify-center transition-all border border-[#decbb0] shadow-xs cursor-pointer"
-                  title="Reset View to All Japan (Key: 0)"
-                >
-                  <RotateCcw className="w-4 h-4 text-[#786653]" />
+                <button onClick={handleResetZoom} className="w-9 h-9 flex items-center justify-center text-[#5a4837] hover:bg-[#f0e6d4] active:bg-[#e8dcc6] transition-colors cursor-pointer" title="Show all of Japan (0)" aria-label="Show all of Japan">
+                  <Maximize2 className="w-4 h-4" />
                 </button>
-
-                {/* Center on Selected Shrine Button */}
                 <button
                   onClick={() => centerOnShrine(selectedShrine)}
-                  className="w-9 h-9 rounded-xl bg-[#fef2f2] hover:bg-[#fee2e2] active:scale-95 text-[#b91c1c] flex items-center justify-center transition-all border border-[#fca5a5] shadow-xs cursor-pointer"
-                  title={`Center on ${selectedShrine.kanjiName}`}
+                  className="w-9 h-9 flex items-center justify-center text-[#5a4837] hover:bg-[#f0e6d4] active:bg-[#e8dcc6] transition-colors cursor-pointer text-[#b91c1c]"
+                  title={`Centre on ${selectedShrine.kanjiName}`}
+                  aria-label="Centre on selected shrine"
                 >
                   <Crosshair className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* TOP-LEFT DIRECTIONAL D-PAD FOR EASY PANNING */}
-              <div className="absolute top-3 left-3 z-30 hidden sm:flex flex-col items-center bg-[#fcf9f3]/95 p-1.5 rounded-2xl border border-[#d3c2a9] shadow-lg backdrop-blur-md">
+              {/* Legend */}
+              <div className="absolute bottom-3 right-3 z-30 flex items-center gap-3 bg-[#fdfbf6]/95 border border-[#d8c8b0] rounded-xl px-3 py-1.5 text-[11px] text-[#5a4836] shadow-md backdrop-blur-sm pointer-events-auto">
+                <span className="flex items-center gap-1 text-[#b91c1c] font-semibold">⛩️ Shrine</span>
+                <span className="flex items-center gap-1 text-[#b45309] font-semibold">🏯 Temple</span>
                 <button
-                  onClick={() => panBy(0, 70)}
-                  className="p-1.5 rounded-lg hover:bg-[#ebdcc4] active:scale-95 text-[#554637] transition-all cursor-pointer"
-                  title="Pan Up (Arrow Up)"
+                  onClick={() => setShowHelpModal(true)}
+                  className="flex items-center text-[#806c57] hover:text-[#b45309] cursor-pointer"
+                  title="Map guide"
+                  aria-label="Map guide"
                 >
-                  <ArrowUp className="w-3.5 h-3.5" />
+                  <HelpCircle className="w-3.5 h-3.5" />
                 </button>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => panBy(70, 0)}
-                    className="p-1.5 rounded-lg hover:bg-[#ebdcc4] active:scale-95 text-[#554637] transition-all cursor-pointer"
-                    title="Pan Left (Arrow Left)"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={handleResetZoom}
-                    className="w-5 h-5 rounded-full bg-[#eee3cf] text-[9px] font-bold text-[#68533e] flex items-center justify-center cursor-pointer hover:bg-[#e4d4bd]"
-                    title="Recenter"
-                  >
-                    •
-                  </button>
-                  <button
-                    onClick={() => panBy(-70, 0)}
-                    className="p-1.5 rounded-lg hover:bg-[#ebdcc4] active:scale-95 text-[#554637] transition-all cursor-pointer"
-                    title="Pan Right (Arrow Right)"
-                  >
-                    <ArrowRightIcon className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <button
-                  onClick={() => panBy(0, -70)}
-                  className="p-1.5 rounded-lg hover:bg-[#ebdcc4] active:scale-95 text-[#554637] transition-all cursor-pointer"
-                  title="Pan Down (Arrow Down)"
-                >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* BOTTOM-LEFT CONVENIENT LEGEND & MINI-NAVIGATOR */}
-              <div className="absolute bottom-3 left-3 z-30 flex flex-col gap-2">
-                <div className="bg-[#fdfbf6]/95 border border-[#d8c8b0] rounded-xl px-3 py-2 text-[10px] text-[#5a4836] shadow-lg backdrop-blur-sm max-w-[260px]">
-                  <div className="flex items-center justify-between gap-3 font-semibold pb-1 border-b border-[#ebdcc7]">
-                    <span className="flex items-center gap-1 text-[#b91c1c]">
-                      <span>⛩️</span> Shinto Shrine
-                    </span>
-                    <span className="flex items-center gap-1 text-[#b45309]">
-                      <span>🏯</span> Buddhist Temple
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-[#806c57] mt-1.5 text-[9px]">
-                    <span className="flex items-center gap-1 font-mono">
-                      <Move className="w-3 h-3 text-[#b45309]" />
-                      Scroll or + / - to zoom
-                    </span>
-                    <button
-                      onClick={() => setShowHelpModal(true)}
-                      className="text-[#b45309] hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
-                    >
-                      <HelpCircle className="w-3 h-3" /> Guide
-                    </button>
-                  </div>
-                </div>
               </div>
 
               {/* Transform Container with Smooth Pan & Zoom (translate in px, scale centered) */}
               <div
-                className="w-full h-full flex items-center justify-center transition-transform duration-100 ease-out relative"
+                className={`w-full h-full flex items-center justify-center relative ${
+                  isDragging ? '' : 'transition-transform duration-200 ease-out'
+                }`}
                 style={{
                   transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
                   transformOrigin: 'center center',
+                  containerType: 'size',
                 }}
               >
-                {/* HIGH-FIDELITY BEIGE VECTOR MAP OF JAPAN */}
+                {/* Fixed-aspect map box: the SVG and the pins share exactly the same coordinate space */}
+                <div
+                  ref={mapBoxRef}
+                  className="relative"
+                  style={{
+                    width: `min(100cqw, calc(100cqh * ${MAP_W} / ${MAP_H}))`,
+                    aspectRatio: `${MAP_W} / ${MAP_H}`,
+                  }}
+                >
                 <svg
-                  viewBox="0 0 900 650"
-                  className="w-full h-full max-h-[640px] drop-shadow-[0_8px_20px_rgba(110,88,60,0.12)]"
+                  viewBox={`0 0 ${MAP_W} ${MAP_H}`}
+                  className="absolute inset-0 w-full h-full drop-shadow-[0_8px_20px_rgba(110,88,60,0.12)]"
                   preserveAspectRatio="xMidYMid meet"
                 >
                   <defs>
@@ -800,287 +798,136 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                   </defs>
 
                   {/* Ocean Base Layer */}
-                  <rect width="900" height="650" fill="url(#oceanBeige)" />
-                  <rect width="900" height="650" fill="url(#waterRipple)" />
+                  <rect width={MAP_W} height={MAP_H} fill="url(#oceanBeige)" />
+                  <rect width={MAP_W} height={MAP_H} fill="url(#waterRipple)" />
 
-                  {/* Concentric Ocean Sounding Rings */}
-                  <ellipse cx="460" cy="380" rx="400" ry="250" fill="none" stroke="#e0d0b8" strokeWidth="1" strokeDasharray="3 6" />
-                  <ellipse cx="460" cy="380" rx="300" ry="180" fill="none" stroke="#e3d4bd" strokeWidth="0.8" />
-
-                  {/* Latitude / Longitude Graticule Grid */}
+                  {/* True latitude / longitude graticule */}
                   <g stroke="#dfd1b8" strokeWidth="0.8" strokeDasharray="2 4">
-                    <line x1="50" y1="120" x2="850" y2="120" />
-                    <line x1="50" y1="240" x2="850" y2="240" />
-                    <line x1="50" y1="360" x2="850" y2="360" />
-                    <line x1="50" y1="480" x2="850" y2="480" />
-                    <line x1="50" y1="600" x2="850" y2="600" />
-                    <line x1="160" y1="50" x2="160" y2="620" />
-                    <line x1="300" y1="50" x2="300" y2="620" />
-                    <line x1="440" y1="50" x2="440" y2="620" />
-                    <line x1="580" y1="50" x2="580" y2="620" />
-                    <line x1="720" y1="50" x2="720" y2="620" />
+                    {GRATICULE.lats.map((l) => (
+                      <line key={`lat${l.deg}`} x1="0" y1={l.y} x2={MAP_W} y2={l.y} />
+                    ))}
+                    {GRATICULE.lons.map((l) => (
+                      <line key={`lon${l.deg}`} x1={l.x} y1="0" x2={l.x} y2={MAP_H} />
+                    ))}
+                  </g>
+                  <g fill="#a8937a" fontSize="9" fontFamily="monospace">
+                    {GRATICULE.lats.map((l) => (
+                      <text key={`latl${l.deg}`} x={MAP_W - 8} y={l.y - 3} textAnchor="end">{l.deg}°N</text>
+                    ))}
+                    {GRATICULE.lons.map((l) => (
+                      <text key={`lonl${l.deg}`} x={l.x + 3} y="12">{l.deg}°E</text>
+                    ))}
                   </g>
 
-                  {/* Degree Labels */}
-                  <g fill="#9c876e" fontSize="9" fontFamily="monospace">
-                    <text x="60" y="115">44°N</text>
-                    <text x="60" y="235">40°N</text>
-                    <text x="60" y="355">36°N</text>
-                    <text x="60" y="475">34°N</text>
-                    <text x="60" y="595">32°N</text>
-                    <text x="165" y="615">130°E</text>
-                    <text x="305" y="615">134°E</text>
-                    <text x="445" y="615">136°E</text>
-                    <text x="585" y="615">140°E</text>
-                    <text x="725" y="615">144°E</text>
+                  {/* Compass rose (方位盤) */}
+                  <g transform="translate(90, 90)">
+                    <circle r="28" fill="none" stroke="#cbb89e" strokeWidth="1" />
+                    <polygon points="0,-24 4,-3 0,0 -4,-3" fill="#b91c1c" />
+                    <polygon points="0,24 4,3 0,0 -4,3" fill="#8c7863" />
+                    <circle r="2.5" fill="#b45309" />
+                    <text y="-32" textAnchor="middle" fill="#b91c1c" fontSize="11" fontFamily="Noto Serif JP" fontWeight="bold">北</text>
                   </g>
 
-                  {/* TRADITIONAL COMPASS ROSE (Hōgaku 方位盤) in Ocean Corner */}
-                  <g transform="translate(115, 120)">
-                    <circle cx="0" cy="0" r="32" fill="none" stroke="#cbb89e" strokeWidth="1" />
-                    <circle cx="0" cy="0" r="26" fill="none" stroke="#d8c7b0" strokeWidth="0.8" strokeDasharray="2 3" />
-                    <polygon points="0,-28 5,-4 0,0 -5,-4" fill="#b91c1c" />
-                    <polygon points="0,28 5,4 0,0 -5,4" fill="#786653" />
-                    <polygon points="-28,0 -4,5 0,0 -4,-5" fill="#8c7863" />
-                    <polygon points="28,0 4,5 0,0 4,-5" fill="#8c7863" />
-                    <circle cx="0" cy="0" r="3.5" fill="#b45309" />
-                    <text x="0" y="-34" textAnchor="middle" fill="#b91c1c" fontSize="11" fontFamily="Noto Serif JP" fontWeight="bold">北</text>
-                    <text x="36" y="4" textAnchor="middle" fill="#786653" fontSize="10" fontFamily="Noto Serif JP">東</text>
-                    <text x="0" y="42" textAnchor="middle" fill="#786653" fontSize="10" fontFamily="Noto Serif JP">南</text>
-                    <text x="-36" y="4" textAnchor="middle" fill="#786653" fontSize="10" fontFamily="Noto Serif JP">西</text>
-                  </g>
-
-                  {/* 1. HOKKAIDO (Detailed Northern Island) */}
+                  {/* Japan coastline — Natural Earth 1:10m, same projection as the pins */}
                   <path
-                    d="M 648,58 
-                       C 670,45 710,50 740,65 
-                       C 765,78 790,82 825,92 
-                       C 840,96 845,108 830,118 
-                       C 810,132 795,145 780,165 
-                       C 760,190 735,210 705,215 
-                       C 680,220 660,195 645,185 
-                       C 630,175 625,188 610,210 
-                       C 595,232 580,230 575,210 
-                       C 570,190 580,172 590,158 
-                       C 605,138 615,115 628,95 
-                       C 635,82 640,68 648,58 Z"
-                    fill="#dbcca8"
-                    stroke="#8c785e"
-                    strokeWidth="1.6"
-                  />
-                  {/* Hokkaido Oshima Peninsula */}
-                  <path
-                    d="M 585,190 
-                       C 570,205 560,225 572,245 
-                       C 580,255 595,250 600,235 
-                       C 605,220 598,200 585,190 Z"
-                    fill="#dbcca8"
-                    stroke="#8c785e"
-                    strokeWidth="1.4"
-                  />
-
-                  {/* Tsugaru Strait dotted sea lane */}
-                  <path d="M 560,250 Q 610,248 640,255" fill="none" stroke="#d5c4aa" strokeWidth="1" strokeDasharray="3 3" />
-
-                  {/* 2. HONSHU (Main Island - Tohoku & Northern Honshu) */}
-                  <path
-                    d="M 590,248 
-                       C 608,252 618,270 615,295 
-                       C 612,320 622,338 618,365 
-                       C 615,385 605,405 588,420 
-                       C 570,435 550,448 535,455 
-                       C 525,440 520,415 510,395 
-                       C 502,375 515,350 518,330 
-                       C 522,305 515,285 528,265 
-                       C 542,245 568,242 590,248 Z"
+                    d={JAPAN_MAINLAND_PATH}
                     fill="url(#honshuBeige)"
                     stroke="#8c785e"
-                    strokeWidth="1.6"
+                    strokeWidth={1.1 / zoomLevel}
+                    strokeLinejoin="round"
                   />
 
-                  {/* Central Honshu: Kanto Plain, Chubu & Mt. Fuji Peninsula */}
-                  <path
-                    d="M 588,418 
-                       C 610,430 625,445 615,475 
-                       C 608,495 585,502 568,490 
-                       C 555,480 550,495 540,510 
-                       C 530,525 518,520 510,505 
-                       C 498,485 505,465 520,455 
-                       C 540,440 565,430 588,418 Z"
-                    fill="url(#kantoBeige)"
-                    stroke="#8c785e"
-                    strokeWidth="1.6"
-                  />
-
-                  {/* Boso Peninsula (Chiba) & Miura Peninsula */}
-                  <path
-                    d="M 615,470 C 625,485 628,505 615,518 C 605,515 600,498 605,482 Z"
-                    fill="url(#kantoBeige)"
-                    stroke="#8c785e"
-                    strokeWidth="1.2"
-                  />
-                  <path
-                    d="M 580,495 C 582,510 575,518 570,510 C 572,500 578,495 580,495 Z"
-                    fill="url(#kantoBeige)"
-                    stroke="#8c785e"
-                    strokeWidth="1.0"
-                  />
-
-                  {/* Western Honshu: Kansai & Kii Peninsula */}
-                  <path
-                    d="M 522,460 
-                       C 510,480 495,510 490,535 
-                       C 485,560 465,565 450,545 
-                       C 438,530 442,505 450,490 
-                       C 460,470 480,460 522,460 Z"
-                    fill="url(#kansaiBeige)"
-                    stroke="#8c785e"
-                    strokeWidth="1.6"
-                  />
-
-                  {/* Lake Biwa (琵琶湖) in Kansai */}
-                  <ellipse cx="488" cy="485" rx="8" ry="14" fill="#c4d8ce" stroke="#7a9689" strokeWidth="1" />
-                  <text x="498" y="488" fill="#5c7a6c" fontSize="8" fontFamily="Noto Serif JP">琵琶湖</text>
-
-                  {/* Western Honshu: Chugoku Region */}
-                  <path
-                    d="M 450,480 
-                       C 430,475 390,475 360,485 
-                       C 335,495 305,508 285,528 
-                       C 275,538 282,550 300,542 
-                       C 325,530 360,525 395,518 
-                       C 425,512 445,500 450,480 Z"
-                    fill="url(#honshuBeige)"
-                    stroke="#8c785e"
-                    strokeWidth="1.6"
-                  />
-
-                  {/* Sado Island */}
-                  <path
-                    d="M 532,328 C 542,322 548,335 540,342 C 532,348 526,335 532,328 Z"
-                    fill="#d7c7a7"
-                    stroke="#8c785e"
-                    strokeWidth="1.2"
-                  />
-
-                  {/* Noto Peninsula */}
-                  <path
-                    d="M 488,405 C 480,380 495,365 505,375 C 510,385 498,412 488,405 Z"
-                    fill="#d7c7a7"
-                    stroke="#8c785e"
-                    strokeWidth="1.2"
-                  />
-
-                  {/* 3. SHIKOKU ISLAND */}
-                  <path
-                    d="M 370,535 
-                       C 400,528 435,532 442,555 
-                       C 445,572 430,590 405,595 
-                       C 375,600 350,580 345,560 
-                       C 342,548 355,540 370,535 Z"
-                    fill="#d8c8a8"
-                    stroke="#8c785e"
-                    strokeWidth="1.6"
-                  />
-                  {/* Awaji Island in Seto Inland Sea */}
-                  <path
-                    d="M 445,528 C 450,522 455,532 450,540 C 445,542 440,535 445,528 Z"
-                    fill="#d8c8a8"
-                    stroke="#8c785e"
-                    strokeWidth="1.0"
-                  />
-
-                  {/* 4. KYUSHU ISLAND */}
-                  <path
-                    d="M 270,518 
-                       C 290,528 298,552 288,580 
-                       C 278,608 265,630 240,635 
-                       C 215,638 198,615 205,585 
-                       C 210,560 225,540 245,525 
-                       C 255,518 262,514 270,518 Z"
-                    fill="#d7c6a6"
-                    stroke="#8c785e"
-                    strokeWidth="1.6"
-                  />
-                  {/* Nagasaki & Shimabara Peninsula */}
-                  <path
-                    d="M 215,550 C 195,558 192,575 205,582 C 215,578 222,562 215,550 Z"
-                    fill="#d7c6a6"
-                    stroke="#8c785e"
-                    strokeWidth="1.2"
-                  />
-
-                  {/* 5. OKINAWA / RYUKYU INSET MINI-MAP */}
-                  <g transform="translate(60, 480)">
-                    <rect x="0" y="0" width="115" height="85" rx="8" fill="#fcf8f0" stroke="#b45309" strokeWidth="1.2" />
-                    <text x="10" y="16" fill="#b45309" fontSize="9" fontFamily="Cinzel" fontWeight="bold">OKINAWA (沖縄)</text>
-                    <path
-                      d="M 25,68 C 40,54 55,42 75,28 C 85,22 90,28 82,36 C 68,50 52,62 35,76 Z"
-                      fill="#d8c8a8"
-                      stroke="#8c785e"
-                      strokeWidth="1.4"
+                  {/* Okinawa inset */}
+                  <g>
+                    <rect
+                      x={OKINAWA_INSET.x}
+                      y={OKINAWA_INSET.y}
+                      width={OKINAWA_INSET.w}
+                      height={OKINAWA_INSET.h}
+                      rx="8"
+                      fill="#fcf8f0"
+                      fillOpacity="0.7"
+                      stroke="#c9a77c"
+                      strokeWidth="1"
                     />
-                    <circle cx="40" cy="65" r="3" fill="#b91c1c" />
-                    <text x="48" y="68" fill="#5a4836" fontSize="8" fontFamily="Noto Serif JP" fontWeight="bold">那覇 (Naha)</text>
+                    <text x={OKINAWA_INSET.x + 10} y={OKINAWA_INSET.y + 17} fill="#b45309" fontSize="9" fontFamily="Cinzel" fontWeight="bold">
+                      OKINAWA 沖縄
+                    </text>
+                    <path d={OKINAWA_INSET.path} fill="url(#honshuBeige)" stroke="#8c785e" strokeWidth={1.1 / zoomLevel} />
                   </g>
 
-                  {/* SACRED MOUNT FUJI MARKER */}
-                  <g transform="translate(545, 488)">
-                    <polygon points="0,-8 7,4 -7,4" fill="#fef3c7" stroke="#b45309" strokeWidth="1.2" />
-                    <polygon points="0,-8 3,-2 -3,-2" fill="#ffffff" />
-                    <text x="9" y="0" fill="#b45309" fontSize="9" fontFamily="Noto Serif JP" fontWeight="bold">▲ 富士山</text>
-                    <text x="9" y="9" fill="#786653" fontSize="7" fontFamily="monospace">3,776m</text>
+                  {/* Mt. Fuji */}
+                  <g transform={`translate(${MAP_LABELS.FUJI[0]}, ${MAP_LABELS.FUJI[1]}) scale(${1 / Math.sqrt(zoomLevel)})`}>
+                    <polygon points="0,-6 5,3 -5,3" fill="#fef3c7" stroke="#b45309" strokeWidth="1" />
+                    <polygon points="0,-6 2.2,-1.6 -2.2,-1.6" fill="#ffffff" />
                   </g>
 
-                  {/* Regional Calligraphy Labels on Map */}
-                  <text x="700" y="135" fill="#7a6952" fontSize="13" fontFamily="Cinzel" letterSpacing="3" fontWeight="bold">HOKKAIDO</text>
-                  <text x="548" y="310" fill="#7a6952" fontSize="12" fontFamily="Cinzel" letterSpacing="2">TOHOKU</text>
-                  <text x="585" y="445" fill="#8c6c44" fontSize="13" fontFamily="Cinzel" letterSpacing="2" fontWeight="bold">KANTO</text>
-                  <text x="440" y="455" fill="#7a6952" fontSize="11" fontFamily="Cinzel" letterSpacing="1">CHUBU</text>
-                  <text x="455" y="535" fill="#8c6c44" fontSize="13" fontFamily="Cinzel" letterSpacing="2" fontWeight="bold">KANSAI</text>
-                  <text x="330" y="505" fill="#7a6952" fontSize="11" fontFamily="Cinzel" letterSpacing="2">CHUGOKU</text>
-                  <text x="375" y="570" fill="#7a6952" fontSize="11" fontFamily="Cinzel" letterSpacing="2">SHIKOKU</text>
-                  <text x="225" y="585" fill="#8c6c44" fontSize="12" fontFamily="Cinzel" letterSpacing="2" fontWeight="bold">KYUSHU</text>
+                  {/* Region labels (fade out when zoomed in so they don't fight the pins) */}
+                  <g
+                    fill="#8a7559"
+                    fontFamily="Cinzel"
+                    letterSpacing="2"
+                    fontSize="11"
+                    opacity={zoomLevel > 1.8 ? 0 : 0.75}
+                    style={{ transition: 'opacity 200ms' }}
+                    pointerEvents="none"
+                  >
+                    {(['HOKKAIDO', 'TOHOKU', 'CHUBU', 'CHUGOKU', 'SHIKOKU', 'KYUSHU'] as const).map((k) => (
+                      <text key={k} x={MAP_LABELS[k][0]} y={MAP_LABELS[k][1]} textAnchor="middle">
+                        {k}
+                      </text>
+                    ))}
+                  </g>
 
-                  {/* Detailed City & Prefecture Sub-Labels when Zoomed In */}
-                  {zoomLevel >= 1.4 && (
-                    <g fill="#6d5843" fontSize="8" fontFamily="Noto Serif JP" opacity="0.85">
-                      <text x="618" y="468">● 東京 (Tokyo)</text>
-                      <text x="596" y="500">● 鎌倉 (Kamakura)</text>
-                      <text x="622" y="420">● 日光 (Nikko)</text>
-                      <text x="480" y="515">● 京都 (Kyoto)</text>
-                      <text x="495" y="542">● 奈良 (Nara)</text>
-                      <text x="522" y="555">● 伊勢 (Ise)</text>
-                      <text x="502" y="525">● 名古屋 (Nagoya)</text>
-                      <text x="540" y="442">● 長野 (Nagano)</text>
-                      <text x="358" y="545">● 広島 (Hiroshima)</text>
-                      <text x="375" y="490">● 出雲 (Izumo)</text>
-                      <text x="250" y="545">● 福岡 (Fukuoka)</text>
-                      <text x="708" y="172">● 札幌 (Sapporo)</text>
-                      <text x="645" y="315">● 平泉 (Hiraizumi)</text>
-                    </g>
-                  )}
-
-                  {/* Surrounding Seas in Classic Calligraphy */}
-                  <text x="310" y="380" fill="#b5a48d" fontSize="15" letterSpacing="6" fontFamily="Cinzel" fontStyle="italic">SEA OF JAPAN (日本海)</text>
-                  <text x="570" y="580" fill="#b5a48d" fontSize="15" letterSpacing="6" fontFamily="Cinzel" fontStyle="italic">PACIFIC OCEAN (太平洋)</text>
-                  <text x="345" y="530" fill="#a8967f" fontSize="9" fontStyle="italic" fontFamily="serif">Seto Inland Sea (瀬戸内海)</text>
+                  {/* Seas */}
+                  <g
+                    fill="#b5a48d"
+                    fontFamily="Cinzel"
+                    fontStyle="italic"
+                    letterSpacing="4"
+                    fontSize="13"
+                    pointerEvents="none"
+                    opacity={zoomLevel > 1.8 ? 0 : 1}
+                    style={{ transition: 'opacity 200ms' }}
+                  >
+                    <text x={MAP_LABELS.SEA_JAPAN[0]} y={MAP_LABELS.SEA_JAPAN[1]} textAnchor="middle">SEA OF JAPAN</text>
+                    <text x={MAP_LABELS.SEA_JAPAN[0]} y={MAP_LABELS.SEA_JAPAN[1] + 16} textAnchor="middle" fontFamily="Noto Serif JP" fontSize="11" letterSpacing="6">日本海</text>
+                    <text x={MAP_LABELS.PACIFIC[0] + 60} y={MAP_LABELS.PACIFIC[1] + 20} textAnchor="middle">PACIFIC OCEAN</text>
+                    <text x={MAP_LABELS.PACIFIC[0] + 60} y={MAP_LABELS.PACIFIC[1] + 36} textAnchor="middle" fontFamily="Noto Serif JP" fontSize="11" letterSpacing="6">太平洋</text>
+                  </g>
                 </svg>
 
-                {/* INTERACTIVE MARKERS OVERLAID PRECISELY ON MAP */}
-                {/* Note: We apply counter-scaling so pins stay compact and don't clump when zoomed in! */}
-                {filteredShrines.map((shrine) => {
+                {/* Leader lines from fanned-out pins back to their true location */}
+                <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
+                  {pinLayout.map((p) =>
+                    p.displaced ? (
+                      <g key={`lead-${p.shrine.id}`}>
+                        <line
+                          x1={p.trueX} y1={p.trueY} x2={p.x} y2={p.y}
+                          stroke="#8c785e" strokeWidth={1 / zoomLevel} strokeOpacity="0.7"
+                        />
+                        <circle cx={p.trueX} cy={p.trueY} r={2 / zoomLevel} fill="#8c785e" />
+                      </g>
+                    ) : null
+                  )}
+                </svg>
+
+                {/* INTERACTIVE MARKERS — anchored so the icon's centre is the real location */}
+                {pinLayout.map(({ shrine, x, y, labelFits }) => {
                   const isSelected = shrine.id === selectedId;
                   const isHovered = hoveredShrine?.id === shrine.id;
+                  const showLabel = isSelected || isHovered || labelFits;
 
                   return (
                     <div
                       key={shrine.id}
                       style={{
-                        left: `${shrine.mapCoords.x}%`,
-                        top: `${shrine.mapCoords.y}%`,
+                        left: `${(x / MAP_W) * 100}%`,
+                        top: `${(y / MAP_H) * 100}%`,
+                        transform: `translate(-50%, -50%) scale(${pinCounterScale})`,
+                        zIndex: isSelected ? 30 : isHovered ? 25 : 20,
                       }}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 z-20 group cursor-pointer"
+                      className="absolute"
                       onClick={(e) => {
                         e.stopPropagation();
                         handlePickShrine(shrine);
@@ -1092,53 +939,43 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                       onMouseEnter={() => setHoveredShrine(shrine)}
                       onMouseLeave={() => setHoveredShrine(null)}
                     >
-                      {/* Counter-scaling wrapper */}
-                      <div
-                        style={{
-                          transform: `scale(${pinCounterScale})`,
-                          transformOrigin: 'bottom center',
-                        }}
-                        className="relative flex flex-col items-center"
-                      >
-                        {/* Radiating animated pulse ring if selected */}
-                        {isSelected && (
-                          <div className="absolute -inset-3 rounded-full bg-[#b91c1c]/30 border-2 border-[#b91c1c] animate-ping pointer-events-none" />
-                        )}
-
-                        {/* Floating Name Badge - Compact and High Contrast */}
+                      {/* Name badge floats above the pin; it never shifts the pin itself */}
+                      {showLabel && (
                         <div
-                          className={`mb-1 px-2 py-0.5 rounded-lg whitespace-nowrap shadow-md pointer-events-none transition-all flex items-center gap-1 border ${
+                          className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded-lg whitespace-nowrap shadow-md pointer-events-none flex items-center gap-1 border ${
                             isSelected
-                              ? 'bg-[#2c241c] border-[#b45309] text-[#fef3c7] text-xs font-bold scale-105 z-30 shadow-lg'
-                              : isHovered
-                              ? 'bg-[#fdfaf3] border-[#b91c1c] text-[#2c241c] text-[11px] font-bold z-20 shadow-md'
-                              : 'bg-[#fdfbf7]/95 border-[#ded2be] text-[#3d3124] text-[10px] opacity-90'
+                              ? 'bg-[#2c241c] border-[#b45309] text-[#fef3c7] text-xs font-bold'
+                              : 'bg-[#fdfbf7] border-[#ded2be] text-[#3d3124] text-[11px]'
                           }`}
                         >
                           <span className="font-kanji font-bold">{shrine.kanjiName.split('（')[0]}</span>
-                          <span className="text-[#806c57] font-sans hidden sm:inline text-[9px]">
+                          <span className={`font-sans hidden sm:inline text-[10px] ${isSelected ? 'text-[#e7d6b8]' : 'text-[#806c57]'}`}>
                             {shrine.name.split('(')[0]}
                           </span>
                         </div>
+                      )}
 
-                        {/* Marker Pin Button */}
-                        <button
-                          className={`flex items-center justify-center transition-all duration-200 rounded-2xl cursor-pointer shadow-md ${
-                            isSelected
-                              ? 'w-10 h-10 bg-gradient-to-br from-[#b91c1c] via-[#ea580c] to-[#b91c1c] text-white ring-3 ring-[#fef08a] shadow-[#991b1b]/50 animate-bounce'
-                              : shrine.type === 'shrine'
-                              ? 'w-8 h-8 bg-[#fdfaf5] border-2 border-[#b91c1c] text-[#b91c1c] hover:scale-115 hover:bg-[#b91c1c] hover:text-white hover:shadow-lg'
-                              : 'w-8 h-8 bg-[#fdfaf5] border-2 border-[#b45309] text-[#b45309] hover:scale-115 hover:bg-[#b45309] hover:text-white hover:shadow-lg'
-                          }`}
-                        >
-                          <span className={isSelected ? 'text-lg' : 'text-sm'}>
-                            {shrine.type === 'shrine' ? '⛩️' : '🏯'}
-                          </span>
-                        </button>
-                      </div>
+                      <button
+                        aria-label={shrine.name}
+                        className={`relative flex items-center justify-center rounded-full cursor-pointer shadow-md transition-colors ${
+                          isSelected
+                            ? 'w-9 h-9 bg-[#b91c1c] text-white ring-4 ring-[#fde68a]/80'
+                            : shrine.type === 'shrine'
+                            ? 'w-7 h-7 bg-[#fdfaf5] border-2 border-[#b91c1c] hover:bg-[#fee2e2]'
+                            : 'w-7 h-7 bg-[#fdfaf5] border-2 border-[#b45309] hover:bg-[#fef3c7]'
+                        }`}
+                      >
+                        {isSelected && (
+                          <span className="absolute inset-0 rounded-full border-2 border-[#b91c1c] animate-ping opacity-60 pointer-events-none" />
+                        )}
+                        <span className={isSelected ? 'text-base' : 'text-xs'}>
+                          {shrine.type === 'shrine' ? '⛩️' : '🏯'}
+                        </span>
+                      </button>
                     </div>
                   );
                 })}
+                </div>
               </div>
             </div>
           )}
@@ -1224,7 +1061,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           )}
 
           {/* Bottom Quick-Select Thumbnail Carousel */}
-          <div className="mt-2 pt-2 border-t border-[#ded0ba] flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none shrink-0">
+          <div className={`mt-2 pt-2 border-t border-[#ded0ba] items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] shrink-0 ${viewMode === 'directory' ? 'hidden' : 'flex'}`}>
             <span className="text-[11px] font-semibold text-[#6e5a47] shrink-0 hidden md:inline">
               Sanctuaries ({filteredShrines.length}):
             </span>
@@ -1254,8 +1091,12 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
         {/* Can be collapsed when map is expanded, or kept visible */}
         <div
           className={`${
-            isMapExpanded && viewMode === 'map' ? 'hidden' : 'lg:col-span-5 xl:col-span-4'
-          } bg-[#fbf7f0] border-t lg:border-t-0 lg:border-l border-[#ded2bd] p-4 sm:p-5 flex flex-col justify-between overflow-y-auto transition-all duration-300`}
+            isMapExpanded && viewMode === 'map'
+              ? 'hidden'
+              : viewMode === 'directory'
+              ? 'hidden lg:flex lg:col-span-5 xl:col-span-4'
+              : 'flex lg:col-span-5 xl:col-span-4'
+          } bg-[#fbf7f0] border-t lg:border-t-0 lg:border-l border-[#ded2bd] px-4 pt-4 sm:px-5 sm:pt-5 flex-col justify-between overflow-y-auto min-h-0 transition-all duration-300`}
         >
           <div className="space-y-3.5">
             {/* Visual Header Banner representing shrine atmosphere */}
@@ -1363,7 +1204,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           </div>
 
           {/* Primary Call to Action Button: Enter in 3D */}
-          <div className="mt-4 pt-3 border-t border-[#ded1be]">
+          <div className="sticky bottom-0 mt-4 pt-3 pb-4 sm:pb-5 border-t border-[#ded1be] bg-[#fbf7f0]">
             <button
               onClick={() => handleEnterWorld(selectedShrine)}
               className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#b91c1c] via-[#ea580c] to-[#b91c1c] hover:from-[#991b1b] hover:to-[#c2410c] text-white font-cinzel font-bold text-sm sm:text-base border border-[#fef08a]/80 shadow-lg shadow-[#b91c1c]/25 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01] active:scale-98 cursor-pointer group"

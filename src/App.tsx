@@ -20,10 +20,25 @@ import {
   updatePilgrimageRitual,
 } from './services/dailyPilgrimageService';
 import { Map, Volume2, VolumeX, Sparkles, BookOpen, Flame } from 'lucide-react';
+import { luckService } from './services/luckService';
+import { LuckChip, LuckToasts, CaptionBar, StoryCardSheet, LuckSheet } from './components/LuckAndLegends';
+import { OmamoriModal } from './components/OmamoriModal';
+import { pilgrimService } from './services/pilgrimService';
+import { OMAMORI, MONTHLY_SEAL } from './data/pilgrimData';
+import type { StoryCard } from './three/encounters/types';
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<'map' | 'explore'>('map');
-  const [currentShrine, setCurrentShrine] = useState<ShrineData>(SHRINES[0]);
+  // Deep link: ?shrine=<id> opens that shrine straight in 3D
+  const linkedShrine = (() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get('shrine');
+      return SHRINES.find((s) => s.id === id) ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const [viewMode, setViewMode] = useState<'map' | 'explore'>(linkedShrine ? 'explore' : 'map');
+  const [currentShrine, setCurrentShrine] = useState<ShrineData>(linkedShrine ?? SHRINES[0]);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
   const [isCinematic, setIsCinematic] = useState(false);
   const [isAutoCycle, setIsAutoCycle] = useState(false);
@@ -31,7 +46,7 @@ export default function App() {
 
   // Modals
   const [activeModal, setActiveModal] = useState<
-    'temizuya' | 'saisen' | 'omikuji' | 'ema' | 'goshuin' | 'miko' | 'daily' | null
+    'temizuya' | 'saisen' | 'omikuji' | 'ema' | 'goshuin' | 'miko' | 'daily' | 'omamori' | null
   >(null);
 
   // Daily Pilgrimage State
@@ -66,6 +81,21 @@ export default function App() {
     }
   });
 
+  // Luck, captions and legend cards
+  const [caption, setCaption] = useState<string | null>(null);
+  const captionTimer = useRef<number | null>(null);
+  const showCaption = (text: string, seconds = 4) => {
+    setCaption(text);
+    if (captionTimer.current) window.clearTimeout(captionTimer.current);
+    captionTimer.current = window.setTimeout(() => setCaption(null), seconds * 1000);
+  };
+  const [storyCard, setStoryCard] = useState<{ card: StoryCard; luck: number; firstTime: boolean } | null>(null);
+  const [showLuck, setShowLuck] = useState(false);
+  const [inLegend, setInLegend] = useState(false);
+  // per-visit manners
+  const visit = useRef({ purified: false, worshipped: false, incense: false, cord: false });
+  const shrinesStamped = new Set(goshuinList.map((g) => g.shrineId)).size;
+
   // Nearby spot callback state
   const [nearbySpot, setNearbySpot] = useState<{ id: string; name: string; type: string } | null>(null);
 
@@ -91,7 +121,32 @@ export default function App() {
           setNearbySpot(null);
         }
       },
+      onCaption: (text, seconds) => showCaption(text, seconds),
+      onLuck: (delta, reason) => luckService.change(delta, reason),
+      onSecret: (id, card, luck) => {
+        const first = luckService.markFound(id);
+        if (first) luckService.change(luck, `Secret found: ${card.title}`);
+        pilgrimService.saveCard(id, card);
+        setStoryCard({ card, luck, firstTime: first });
+      },
+      onEncounter: (e) => {
+        if (e.type === 'start') {
+          setInLegend(true);
+          setActiveModal(null);
+        } else if (e.type === 'caption' && e.text) {
+          showCaption(e.text, e.seconds ?? 4);
+        } else if (e.type === 'end' && e.card) {
+          setInLegend(false);
+          setCaption(null);
+          const first = luckService.markFound(e.id);
+          if (first) luckService.change(4, `Legend discovered: ${e.card.title}`);
+          pilgrimService.saveCard(e.id, e.card);
+          setStoryCard({ card: e.card, luck: 4, firstTime: first });
+        }
+      },
     });
+    visit.current = { purified: false, worshipped: false, incense: false, cord: false };
+    scene.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => OMAMORI[c.kind].cord));
 
     scene.setTimeOfDay(timeOfDay);
     sceneInstanceRef.current = scene;
@@ -144,7 +199,8 @@ export default function App() {
   // Save Goshuin
   const handleAddGoshuin = (entry: GoshuinEntry) => {
     setGoshuinList((prev) => {
-      if (prev.some((g) => g.shrineId === entry.shrineId)) return prev;
+      // one seal per shrine per month (monthly seals change design)
+      if (prev.some((g) => g.shrineId === entry.shrineId && (g.ym ?? '') === (entry.ym ?? ''))) return prev;
       const updated = [...prev, entry];
       localStorage.setItem('vjinja_goshuin', JSON.stringify(updated));
       return updated;
@@ -222,9 +278,13 @@ export default function App() {
     } else if (nearbySpot.type === 'ema') {
       setActiveModal('ema');
     } else if (nearbySpot.type === 'torii') {
-      soundService.playFootstep();
+      sceneInstanceRef.current?.bow();
     } else if (nearbySpot.type === 'jokoro') {
       soundService.playTemizuWater();
+      if (!visit.current.incense) {
+        visit.current.incense = true;
+        luckService.change(1, 'Wafted the healing incense smoke over yourself');
+      }
     }
   };
 
@@ -266,8 +326,9 @@ export default function App() {
         <JapanMapPicker
           onSelectShrine={handleSelectShrineFromMap}
           onOpenGoshuin={() => setActiveModal('goshuin')}
-          goshuinCount={goshuinList.length}
+          goshuinCount={shrinesStamped}
           onOpenDailyPilgrimage={() => setActiveModal('daily')}
+          onOpenLuck={() => setShowLuck(true)}
           dailyProgress={{
             completed: dailyState.missions.filter((m) => m.isCompleted).length,
             total: dailyState.missions.length,
@@ -286,18 +347,18 @@ export default function App() {
           />
 
           {/* Top Left Minimal Header & Map Back Button (Unobtrusive & Beige Theme) */}
-          <div className="fixed top-4 left-4 z-30 flex items-center gap-2 pointer-events-auto">
+          <div className="fixed top-3 left-3 sm:top-4 sm:left-4 z-30 flex items-center gap-2 pointer-events-auto min-w-0">
             <button
               onClick={handleReturnToMap}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#fbf8f0]/95 hover:bg-[#f3ebd7] text-[#2c241c] border border-[#d8cabb] text-xs font-cinzel font-bold transition-all shadow-md hover:border-[#b45309] cursor-pointer"
             >
               <Map className="w-4 h-4 text-[#b91c1c]" />
-              <span>Japan Map</span>
+              <span className="hidden sm:inline">Japan Map</span>
             </button>
 
-            <div className="px-3.5 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md flex items-center gap-2">
-              <span className="font-kanji font-bold text-[#b91c1c]">
-                {currentShrine.kanjiName}
+            <div className="hidden min-[480px]:flex px-3 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md items-center gap-2 min-w-0 max-w-[38vw] sm:max-w-none">
+              <span className="font-kanji font-bold text-[#b91c1c] truncate">
+                {currentShrine.kanjiName.split('（')[0]}
               </span>
               <span className="text-[#6d5b49] hidden sm:inline">
                 ({currentShrine.region} • {currentShrine.prefecture})
@@ -306,7 +367,8 @@ export default function App() {
           </div>
 
           {/* Top Right Quick Stamps, Daily Pilgrimage Missions & Sound */}
-          <div className="fixed top-4 right-4 z-30 flex items-center gap-2 pointer-events-auto">
+          <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30 flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
+            <LuckChip onClick={() => setShowLuck(true)} compact />
             {/* Daily Pilgrimage Progress Tracker in 3D HUD */}
             <button
               onClick={() => setActiveModal('daily')}
@@ -330,7 +392,7 @@ export default function App() {
               <BookOpen className="w-4 h-4 text-[#b45309]" />
               <span className="hidden sm:inline">Goshuinchō</span>
               <span className="text-[10px] bg-[#ebdcc7] text-[#78350f] px-1.5 py-0.5 rounded font-mono font-bold">
-                {goshuinList.length}/{SHRINES.length}
+                {shrinesStamped}/{SHRINES.length}
               </span>
             </button>
 
@@ -343,33 +405,8 @@ export default function App() {
             </button>
           </div>
 
-          {/* Interactive Proximity Prompt (Floating above bottom dock when near a spot) */}
-          {nearbySpot && !activeModal && (
-            <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <button
-                onClick={handleInteractWithSpot}
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-red-700 via-amber-700 to-red-600 hover:from-red-600 hover:to-amber-500 text-amber-100 font-cinzel font-semibold text-xs sm:text-sm border border-amber-400/60 shadow-2xl flex items-center gap-2.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>
-                  Press [E] or Click to{' '}
-                  {nearbySpot.type === 'temizuya'
-                    ? 'Purify at Water Basin'
-                    : nearbySpot.type === 'haiden'
-                    ? 'Offer Coin & Pray'
-                    : nearbySpot.type === 'omikuji'
-                    ? 'Draw Fortune Slip'
-                    : nearbySpot.type === 'ema'
-                    ? 'Hang Prayer Tablet'
-                    : nearbySpot.type === 'jokoro'
-                    ? 'Waft Incense Smoke'
-                    : 'Bow in Reverence'}
-                </span>
-              </button>
-            </div>
-          )}
-
           {/* Consolidated Collapsible Bottom Dock (Zero Viewport Occlusion) */}
+          {!inLegend && (
           <ControlDock
             shrine={currentShrine}
             timeOfDay={timeOfDay}
@@ -382,6 +419,7 @@ export default function App() {
             onOpenOmikuji={() => setActiveModal('omikuji')}
             onOpenEma={() => setActiveModal('ema')}
             onOpenGoshuin={() => setActiveModal('goshuin')}
+            onOpenOmamori={() => setActiveModal('omamori')}
             onOpenMikoDialogue={() => setActiveModal('miko')}
             onOpenDailyPilgrimage={() => setActiveModal('daily')}
             dailyProgress={{
@@ -395,14 +433,35 @@ export default function App() {
             isAutoCycle={isAutoCycle}
             onToggleAutoCycle={handleToggleAutoCycle}
             currentNearbySpot={nearbySpot}
-          />
+            onBow={() => sceneInstanceRef.current?.bow()}
+          >
+            {nearbySpot && !activeModal && (
+              <button
+                onClick={handleInteractWithSpot}
+                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-red-700 via-amber-700 to-red-600 hover:from-red-600 hover:to-amber-500 text-amber-100 font-cinzel font-semibold text-xs sm:text-sm border border-amber-400/60 shadow-2xl flex items-center gap-2.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>
+                  <span className="pointer-coarse:hidden">[E] </span>
+                  {nearbySpot.type === 'temizuya'
+                    ? 'Purify at Water Basin'
+                    : nearbySpot.type === 'haiden'
+                    ? 'Offer Coin & Pray'
+                    : nearbySpot.type === 'omikuji'
+                    ? 'Draw Fortune Slip'
+                    : nearbySpot.type === 'ema'
+                    ? 'Hang Prayer Tablet'
+                    : nearbySpot.type === 'jokoro'
+                    ? 'Waft Incense Smoke'
+                    : 'Bow in Reverence'}
+                </span>
+              </button>
+            )}
+          </ControlDock>
+          )}
 
           {/* Virtual Touch Joystick for Mobile / Tablets */}
-          <VirtualJoystick
-            onMove={handleJoystickMove}
-            onInteract={nearbySpot ? handleInteractWithSpot : undefined}
-            interactLabel={nearbySpot ? `Interact: ${nearbySpot.name.split('(')[0]}` : null}
-          />
+          <VirtualJoystick onMove={handleJoystickMove} />
         </>
       )}
 
@@ -411,6 +470,7 @@ export default function App() {
         <TemizuyaModal
           onClose={() => setActiveModal(null)}
           onPurified={() => {
+            visit.current.purified = true;
             handleRitualProgress('temizuya');
           }}
         />
@@ -420,14 +480,22 @@ export default function App() {
         <SaisenWorshipModal
           shrine={currentShrine}
           onClose={() => setActiveModal(null)}
+          onDisrespect={(reason) => luckService.change(-2, reason)}
           onWorshipComplete={() => {
+            if (!visit.current.worshipped) {
+              visit.current.worshipped = true;
+              if (visit.current.purified) luckService.change(2, 'Purified at the temizuya before praying, the proper order');
+              else luckService.change(-2, 'Prayed without purifying at the temizuya first');
+            }
             // Auto add Goshuin if user completes ritual!
             handleAddGoshuin({
               shrineId: currentShrine.id,
               shrineName: currentShrine.name,
               kanjiName: currentShrine.kanjiName,
               date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
-              sealColor: '#c52210',
+              sealColor: MONTHLY_SEAL[new Date().getMonth() + 1].color,
+              month: new Date().getMonth() + 1,
+              ym: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
             });
             handleRitualProgress('saisen');
           }}
@@ -437,6 +505,7 @@ export default function App() {
       {activeModal === 'omikuji' && (
         <OmikujiModal
           shrine={currentShrine}
+          luck={luckService.get().value}
           onClose={() => setActiveModal(null)}
           onSaveFortune={(fortune) => {
             handleSaveFortune(fortune);
@@ -466,6 +535,23 @@ export default function App() {
             handleRitualProgress('goshuin');
           }}
           onClose={() => setActiveModal(null)}
+          onOpenCard={(_id, card) => setStoryCard({ card, luck: 0, firstTime: false })}
+        />
+      )}
+
+      {activeModal === 'omamori' && (
+        <OmamoriModal
+          shrine={currentShrine}
+          tiedHere={pilgrimService.cordsFor(currentShrine.id).length}
+          onClose={() => setActiveModal(null)}
+          onReceive={(kind, forWhom) => {
+            pilgrimService.receiveOmamori({ kind, forWhom, shrineId: currentShrine.id, shrineName: currentShrine.name, kanjiName: currentShrine.kanjiName });
+            sceneInstanceRef.current?.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => OMAMORI[c.kind].cord));
+            if (!visit.current.cord) {
+              visit.current.cord = true;
+              luckService.change(1, 'Tied a goen-musubi cord to the sacred tree');
+            }
+          }}
         />
       )}
 
@@ -506,6 +592,14 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Luck notes, captions and legend cards */}
+      <LuckToasts />
+      <CaptionBar text={caption} />
+      {storyCard && (
+        <StoryCardSheet card={storyCard.card} luck={storyCard.luck} firstTime={storyCard.firstTime} onClose={() => setStoryCard(null)} />
+      )}
+      {showLuck && <LuckSheet onClose={() => setShowLuck(false)} />}
 
       {/* Quest & Milestone Completion Toast */}
       {questToast && (

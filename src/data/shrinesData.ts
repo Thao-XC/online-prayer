@@ -9,7 +9,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kansai',
     prefecture: 'Kyoto',
-    mapCoords: { x: 49.8, y: 52.0 },
+    mapCoords: { x: 49.2, y: 70.99 }, // 34.967°N 135.773°E
     establishedYear: '711 CE',
     enshrinedDeityOrBuddha: 'Inari Okami (Goddess of Rice, Harvest & Prosperity)',
     primaryBlessing: 'Business Prosperity, Good Harvest & Family Safety',
@@ -95,7 +95,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Chugoku',
     prefecture: 'Hiroshima (Miyajima)',
-    mapCoords: { x: 36.8, y: 54.8 },
+    mapCoords: { x: 36.66, y: 75.22 }, // 34.296°N 132.32°E
     establishedYear: '593 CE',
     enshrinedDeityOrBuddha: 'Three Munakata Goddesses (Protectors of Seas & Safe Travel)',
     primaryBlessing: 'Maritime Safety, Protection from Harm & Safe Voyages',
@@ -181,7 +181,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kanto',
     prefecture: 'Tokyo (Shibuya)',
-    mapCoords: { x: 62.4, y: 49.6 },
+    mapCoords: { x: 63.46, y: 66.53 }, // 35.676°N 139.699°E
     establishedYear: '1920 CE',
     enshrinedDeityOrBuddha: 'Emperor Meiji & Empress Shoken',
     primaryBlessing: 'Peace of Mind, Harmonious Marriage & Good Fortune',
@@ -267,7 +267,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Kanto',
     prefecture: 'Tokyo (Asakusa)',
-    mapCoords: { x: 63.8, y: 48.2 },
+    mapCoords: { x: 63.82, y: 66.28 }, // 35.715°N 139.797°E
     establishedYear: '628 CE',
     enshrinedDeityOrBuddha: 'Bodhisattva Kannon (Goddess of Infinite Mercy)',
     primaryBlessing: 'Spiritual Mercy, Wish Fulfillment & Healing',
@@ -353,7 +353,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Kansai',
     prefecture: 'Wakayama',
-    mapCoords: { x: 48.6, y: 56.8 },
+    mapCoords: { x: 48.51, y: 75.74 }, // 34.213°N 135.583°E
     establishedYear: '816 CE',
     enshrinedDeityOrBuddha: 'Dainichi Nyorai (Cosmic Cosmic Buddha)',
     primaryBlessing: 'Spiritual Awakening, Inner Peace & Transcendence',
@@ -439,7 +439,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Kansai',
     prefecture: 'Kyoto (Kita)',
-    mapCoords: { x: 48.8, y: 50.8 },
+    mapCoords: { x: 49.04, y: 70.54 }, // 35.039°N 135.729°E
     establishedYear: '1397 CE',
     enshrinedDeityOrBuddha: 'Relics of the Buddha & Bodhisattva Kannon',
     primaryBlessing: 'Spiritual Purification, Inner Radiance & Prosperity',
@@ -525,7 +525,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Kansai',
     prefecture: 'Kyoto (Higashiyama)',
-    mapCoords: { x: 50.5, y: 51.5 },
+    mapCoords: { x: 49.24, y: 70.82 }, // 34.995°N 135.785°E
     establishedYear: '778 CE',
     enshrinedDeityOrBuddha: 'Eleven-Headed Thousand-Armed Kannon',
     primaryBlessing: 'Health & Longevity, Academic Success & Good Relationships',
@@ -611,7 +611,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kanto',
     prefecture: 'Tochigi (Nikko)',
-    mapCoords: { x: 60.5, y: 43.5 },
+    mapCoords: { x: 63.1, y: 59.71 }, // 36.758°N 139.599°E
     establishedYear: '1617 CE',
     enshrinedDeityOrBuddha: 'Tōshō Daigongen (Deified Tokugawa Ieyasu)',
     primaryBlessing: 'Triumph over Adversity, Resilience & Unshakable Fortitude',
@@ -697,7 +697,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kansai',
     prefecture: 'Mie (Ise)',
-    mapCoords: { x: 53.0, y: 55.5 },
+    mapCoords: { x: 52.66, y: 74.22 }, // 34.455°N 136.725°E
     establishedYear: '4 BCE',
     enshrinedDeityOrBuddha: 'Amaterasu Ōmikami (Supreme Sun Goddess)',
     primaryBlessing: 'Supreme Harmony, Universal Light, Gratitude & Pure Life',
@@ -774,7 +774,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Chugoku',
     prefecture: 'Shimane (Izumo)',
-    mapCoords: { x: 39.5, y: 49.0 },
+    mapCoords: { x: 37.98, y: 68.25 }, // 35.402°N 132.685°E
     establishedYear: 'Mythological Era',
     enshrinedDeityOrBuddha: 'Ōkuninushi no Ōkami (Deity of En-musubi & Fate)',
     primaryBlessing: 'En-musubi (Bonds of Love, Friendship & Destined Encounters)',
@@ -860,7 +860,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Kansai',
     prefecture: 'Nara',
-    mapCoords: { x: 50.5, y: 54.2 },
+    mapCoords: { x: 49.44, y: 72.74 }, // 34.689°N 135.84°E
     establishedYear: '752 CE',
     enshrinedDeityOrBuddha: 'Rushana Buddha (Great Buddha of Nara, Daibutsu)',
     primaryBlessing: 'Universal Compassion, Peace & Boundless Enlightenment',
@@ -937,7 +937,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kyushu',
     prefecture: 'Fukuoka (Dazaifu)',
-    mapCoords: { x: 27.5, y: 54.5 },
+    mapCoords: { x: 30.17, y: 80.1 }, // 33.521°N 130.535°E
     establishedYear: '919 CE',
     enshrinedDeityOrBuddha: 'Sugawara no Michizane (Tenjin-sama, God of Learning)',
     primaryBlessing: 'Academic Success, Passing Exams, Wisdom & Calligraphy',
@@ -1014,7 +1014,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Hokkaido',
     prefecture: 'Hokkaido (Sapporo)',
-    mapCoords: { x: 69.5, y: 17.5 },
+    mapCoords: { x: 69.31, y: 20.06 }, // 43.054°N 141.308°E
     establishedYear: '1869 CE',
     enshrinedDeityOrBuddha: 'Three Pioneering Deities & Emperor Meiji',
     primaryBlessing: 'Pioneering Spirit, Safe Travel, New Beginnings & Resilience',
@@ -1091,7 +1091,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Shikoku',
     prefecture: 'Kagawa (Kotohira)',
-    mapCoords: { x: 40.5, y: 57.2 },
+    mapCoords: { x: 42.07, y: 75.92 }, // 34.184°N 133.81°E
     establishedYear: 'Ancient Period',
     enshrinedDeityOrBuddha: 'Ōmononushi no Kami (Protector of Seafarers & Oceans)',
     primaryBlessing: 'Maritime Safety, Successful Voyages, Agriculture & Good Luck',
@@ -1168,7 +1168,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Kanto',
     prefecture: 'Kanagawa (Kamakura)',
-    mapCoords: { x: 61.2, y: 49.8 },
+    mapCoords: { x: 62.87, y: 68.79 }, // 35.317°N 139.536°E
     establishedYear: '1252 CE',
     enshrinedDeityOrBuddha: 'Amida Nyorai (Amitābha - Buddha of Infinite Light)',
     primaryBlessing: 'Spiritual Peace, Compassion, Longevity & Safe Passages',
@@ -1245,7 +1245,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Chubu',
     prefecture: 'Nagano (Shinshu)',
-    mapCoords: { x: 55.0, y: 44.5 },
+    mapCoords: { x: 57.97, y: 60.32 }, // 36.662°N 138.188°E
     establishedYear: '642 CE',
     enshrinedDeityOrBuddha: 'Ikko Sanzon Amida Nyorai (First Buddha Statue to Enter Japan)',
     primaryBlessing: 'Universal Salvation Regardless of Creed, Peace & Good Health',
@@ -1322,7 +1322,7 @@ export const SHRINES: ShrineData[] = [
     type: 'temple',
     region: 'Tohoku',
     prefecture: 'Iwate (Hiraizumi)',
-    mapCoords: { x: 65.5, y: 31.8 },
+    mapCoords: { x: 68.55, y: 45.6 }, // 38.999°N 141.1°E
     establishedYear: '850 CE',
     enshrinedDeityOrBuddha: 'Amida Nyorai & Northern Fujiwara Pure Land Sanctuary',
     primaryBlessing: 'Peace on Earth, Ancestral Harmony, Prosperity & Serenity',
@@ -1399,7 +1399,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Chubu',
     prefecture: 'Aichi (Nagoya)',
-    mapCoords: { x: 51.2, y: 52.8 },
+    mapCoords: { x: 53.33, y: 69.98 }, // 35.128°N 136.909°E
     establishedYear: '113 CE',
     enshrinedDeityOrBuddha: 'Atsuta no Ōkami (Enshrining Sacred Sword Kusanagi-no-Tsurugi)',
     primaryBlessing: 'Triumph in Endeavors, Protection from Danger, Health & Fortitude',
@@ -1476,7 +1476,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kansai',
     prefecture: 'Wakayama (Kii Mountain Range)',
-    mapCoords: { x: 50.2, y: 62.0 },
+    mapCoords: { x: 49.62, y: 79.17 }, // 33.668°N 135.89°E
     establishedYear: 'Ancient Era (317 CE)',
     enshrinedDeityOrBuddha: 'Fusumi no Okami (Goddess of Origin) & Sacred Waterfall Deity',
     primaryBlessing: 'Spiritual Rebirth, Wish Fulfillment, Good Relations & Renewal',
@@ -1553,7 +1553,7 @@ export const SHRINES: ShrineData[] = [
     type: 'shrine',
     region: 'Kyushu',
     prefecture: 'Okinawa (Naha)',
-    mapCoords: { x: 13.8, y: 83.5 },
+    mapCoords: { x: 6.84, y: 87 }, // 26.221°N 127.671°E
     establishedYear: 'Ryukyu Kingdom Era (Ancient)',
     enshrinedDeityOrBuddha: 'Izanami no Mikoto & Nirai Kanai Oceanic Kami',
     primaryBlessing: 'Maritime Safety, Safe Flights, Healthy Families & Good Fortune',
