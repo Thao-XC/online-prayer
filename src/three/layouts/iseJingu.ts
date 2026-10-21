@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills, ramp } from './types';
 import { offering, ritualSet } from './common';
 
+import { amaNoIwato } from '../encounters/legends';
 /**
  * Ise Jingū — Naikū (Kōtai Jingū), Mie.
  * Cross the cypress Uji Bridge over the Isuzu River between two plain torii; walk the white-gravel
@@ -126,10 +127,52 @@ export const iseJingu: Layout = (ctx) => {
   ctx.scene.add(nat.forest('cedar', nat.scatter(240, { x0: -130, x1: 130, z0: -150, z1: 140 }, clear, 3), [1.4, 2.0], ctx.ground));
   ctx.scene.add(nat.forest('broadleaf', nat.scatter(80, { x0: -130, x1: 130, z0: -150, z1: 140 }, clear, 19), [1, 1.4], ctx.ground));
 
+  // Ise's sacred chickens wander the gravel
+  [[6, 30, 1], [-5, 36, 3], [7, 38, 5]].forEach(([x, z, r]) => {
+    const c = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 8), new THREE.MeshStandardMaterial({ color: 0xf6f1e6 }));
+    body.scale.set(0.8, 1, 1.2);
+    body.position.y = 0.45;
+    c.add(body);
+    const comb = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.14), new THREE.MeshStandardMaterial({ color: 0xd02a1d }));
+    comb.position.set(0, 0.85, 0.18);
+    c.add(comb);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), body.material);
+    head.position.set(0, 0.75, 0.18);
+    c.add(head);
+    ctx.add(c, x, z, r);
+  });
+
   return {
+    encounters: [amaNoIwato({ zone: (x, z) => (riverA(z) && Math.abs(x) > 3.4) || riverB(x, z), exit: { x: -22, z: 16, rotY: -Math.PI / 2 } })],
+    secrets: [
+      {
+        id: 'ise-sengu',
+        at: [12, -34],
+        r: 3,
+        trigger: 'linger',
+        seconds: 3,
+        hint: 'Beside the sanctuary lies an empty plot of white stones…',
+        luck: 2,
+        card: {
+          title: 'Shikinen Sengū: rebuilt every 20 years',
+          jp: '式年遷宮',
+          body: [
+            'Every twenty years the main sanctuary is rebuilt, exactly as before, on the empty plot right beside it, and the goddess is moved to her new home by night.',
+            'The custom has been kept, with a few interruptions, since the year 690. The 62nd rebuilding was completed in 2013, and the next is due in 2033.',
+            'The rebuilding passes the old carpentry skills from one generation to the next. The shrine is ancient and brand new at the same time.',
+          ],
+          ending: 'You look from the new hall to the empty plot, and back again.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 96, 0, 79], [0, 53, 0, 28], [0, 0, 0, -33]],
+      forbidden: [{ test: (x, z) => z < -43 && Math.abs(x) < 20, reason: 'Beyond the white curtain only priests may enter. Visitors pray at the gate.', penalty: 4 }],
+    },
     spawn: { x: 0, z: 94, rotY: 0 },
     bounds: { x0: -34, x1: 30, z0: -44, z1: 98 },
-    walkable: (x, z) => (riverA(z) ? Math.abs(x) < 3.2 : true) && !riverB(x, z) && !(z < -43 && Math.abs(x) < 20),
+    walkable: (x, z) => (riverA(z) ? Math.abs(x) < 3.2 : true) && !riverB(x, z),
     anchors: {
       torii: { at: [0, 84], look: [0, 66] },
       temizuya: { at: [-27, 16], look: [-34, 16] },

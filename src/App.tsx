@@ -20,6 +20,9 @@ import {
   updatePilgrimageRitual,
 } from './services/dailyPilgrimageService';
 import { Map, Volume2, VolumeX, Sparkles, BookOpen, Flame } from 'lucide-react';
+import { luckService } from './services/luckService';
+import { LuckChip, LuckToasts, CaptionBar, StoryCardSheet, LuckSheet } from './components/LuckAndLegends';
+import type { StoryCard } from './three/encounters/types';
 
 export default function App() {
   // Deep link: ?shrine=<id> opens that shrine straight in 3D
@@ -75,6 +78,20 @@ export default function App() {
     }
   });
 
+  // Luck, captions and legend cards
+  const [caption, setCaption] = useState<string | null>(null);
+  const captionTimer = useRef<number | null>(null);
+  const showCaption = (text: string, seconds = 4) => {
+    setCaption(text);
+    if (captionTimer.current) window.clearTimeout(captionTimer.current);
+    captionTimer.current = window.setTimeout(() => setCaption(null), seconds * 1000);
+  };
+  const [storyCard, setStoryCard] = useState<{ card: StoryCard; luck: number; firstTime: boolean } | null>(null);
+  const [showLuck, setShowLuck] = useState(false);
+  const [inLegend, setInLegend] = useState(false);
+  // per-visit manners
+  const visit = useRef({ purified: false, worshipped: false, incense: false });
+
   // Nearby spot callback state
   const [nearbySpot, setNearbySpot] = useState<{ id: string; name: string; type: string } | null>(null);
 
@@ -100,7 +117,29 @@ export default function App() {
           setNearbySpot(null);
         }
       },
+      onCaption: (text, seconds) => showCaption(text, seconds),
+      onLuck: (delta, reason) => luckService.change(delta, reason),
+      onSecret: (id, card, luck) => {
+        const first = luckService.markFound(id);
+        if (first) luckService.change(luck, `Secret found: ${card.title}`);
+        setStoryCard({ card, luck, firstTime: first });
+      },
+      onEncounter: (e) => {
+        if (e.type === 'start') {
+          setInLegend(true);
+          setActiveModal(null);
+        } else if (e.type === 'caption' && e.text) {
+          showCaption(e.text, e.seconds ?? 4);
+        } else if (e.type === 'end' && e.card) {
+          setInLegend(false);
+          setCaption(null);
+          const first = luckService.markFound(e.id);
+          if (first) luckService.change(4, `Legend discovered: ${e.card.title}`);
+          setStoryCard({ card: e.card, luck: 4, firstTime: first });
+        }
+      },
     });
+    visit.current = { purified: false, worshipped: false, incense: false };
 
     scene.setTimeOfDay(timeOfDay);
     sceneInstanceRef.current = scene;
@@ -231,9 +270,13 @@ export default function App() {
     } else if (nearbySpot.type === 'ema') {
       setActiveModal('ema');
     } else if (nearbySpot.type === 'torii') {
-      soundService.playFootstep();
+      sceneInstanceRef.current?.bow();
     } else if (nearbySpot.type === 'jokoro') {
       soundService.playTemizuWater();
+      if (!visit.current.incense) {
+        visit.current.incense = true;
+        luckService.change(1, 'Wafted the healing incense smoke over yourself');
+      }
     }
   };
 
@@ -277,6 +320,7 @@ export default function App() {
           onOpenGoshuin={() => setActiveModal('goshuin')}
           goshuinCount={goshuinList.length}
           onOpenDailyPilgrimage={() => setActiveModal('daily')}
+          onOpenLuck={() => setShowLuck(true)}
           dailyProgress={{
             completed: dailyState.missions.filter((m) => m.isCompleted).length,
             total: dailyState.missions.length,
@@ -304,7 +348,7 @@ export default function App() {
               <span className="hidden sm:inline">Japan Map</span>
             </button>
 
-            <div className="px-3 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md flex items-center gap-2 min-w-0 max-w-[38vw] sm:max-w-none">
+            <div className="hidden min-[480px]:flex px-3 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md items-center gap-2 min-w-0 max-w-[38vw] sm:max-w-none">
               <span className="font-kanji font-bold text-[#b91c1c] truncate">
                 {currentShrine.kanjiName.split('（')[0]}
               </span>
@@ -316,6 +360,7 @@ export default function App() {
 
           {/* Top Right Quick Stamps, Daily Pilgrimage Missions & Sound */}
           <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30 flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
+            <LuckChip onClick={() => setShowLuck(true)} compact />
             {/* Daily Pilgrimage Progress Tracker in 3D HUD */}
             <button
               onClick={() => setActiveModal('daily')}
@@ -353,6 +398,7 @@ export default function App() {
           </div>
 
           {/* Consolidated Collapsible Bottom Dock (Zero Viewport Occlusion) */}
+          {!inLegend && (
           <ControlDock
             shrine={currentShrine}
             timeOfDay={timeOfDay}
@@ -378,6 +424,7 @@ export default function App() {
             isAutoCycle={isAutoCycle}
             onToggleAutoCycle={handleToggleAutoCycle}
             currentNearbySpot={nearbySpot}
+            onBow={() => sceneInstanceRef.current?.bow()}
           >
             {nearbySpot && !activeModal && (
               <button
@@ -402,6 +449,7 @@ export default function App() {
               </button>
             )}
           </ControlDock>
+          )}
 
           {/* Virtual Touch Joystick for Mobile / Tablets */}
           <VirtualJoystick onMove={handleJoystickMove} />
@@ -413,6 +461,7 @@ export default function App() {
         <TemizuyaModal
           onClose={() => setActiveModal(null)}
           onPurified={() => {
+            visit.current.purified = true;
             handleRitualProgress('temizuya');
           }}
         />
@@ -422,7 +471,13 @@ export default function App() {
         <SaisenWorshipModal
           shrine={currentShrine}
           onClose={() => setActiveModal(null)}
+          onDisrespect={(reason) => luckService.change(-2, reason)}
           onWorshipComplete={() => {
+            if (!visit.current.worshipped) {
+              visit.current.worshipped = true;
+              if (visit.current.purified) luckService.change(2, 'Purified at the temizuya before praying, the proper order');
+              else luckService.change(-2, 'Prayed without purifying at the temizuya first');
+            }
             // Auto add Goshuin if user completes ritual!
             handleAddGoshuin({
               shrineId: currentShrine.id,
@@ -439,6 +494,7 @@ export default function App() {
       {activeModal === 'omikuji' && (
         <OmikujiModal
           shrine={currentShrine}
+          luck={luckService.get().value}
           onClose={() => setActiveModal(null)}
           onSaveFortune={(fortune) => {
             handleSaveFortune(fortune);
@@ -508,6 +564,14 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Luck notes, captions and legend cards */}
+      <LuckToasts />
+      <CaptionBar text={caption} />
+      {storyCard && (
+        <StoryCardSheet card={storyCard.card} luck={storyCard.luck} firstTime={storyCard.firstTime} onClose={() => setStoryCard(null)} />
+      )}
+      {showLuck && <LuckSheet onClose={() => setShowLuck(false)} />}
 
       {/* Quest & Milestone Completion Toast */}
       {questToast && (

@@ -2,6 +2,7 @@ import type { Layout } from './types';
 import { hills } from './types';
 import { offering, ritualSet, lanternRow } from './common';
 
+import * as THREE from 'three';
 /**
  * Kōyasan Danjō Garan, Wakayama.
  * Mountain-top monastery among giant cedars. The vermilion two-storey Chūmon gate opens onto a gravel
@@ -44,7 +45,39 @@ export const koyasan: Layout = (ctx) => {
   ctx.scene.add(nat.forest('cedar', [[-40, 30], [40, 34], [-38, -40], [42, -42], [20, 50], [-22, 52]], [1.5, 1.8], ctx.ground));
   ctx.scene.add(nat.forest('maple', nat.scatter(18, { x0: -44, x1: 44, z0: -44, z1: 56 }, (x, z) => Math.abs(x) < 34 && z > -36 && z < 50, 8), [0.8, 1], ctx.ground));
 
+  // Sanko-no-matsu, the three-needle pine, in its little fence before the Miedō
+  ctx.scene.add(nat.forest('pine', [[8, -24, 1.2]], [1.2, 1.2], ctx.ground));
+  const pf = new THREE.Group();
+  [0, Math.PI / 2, Math.PI, -Math.PI / 2].forEach((r) => {
+    const side = arch.fence(4.4, 0.8, 'darkWood');
+    side.position.set(Math.sin(r) * 2.2, 0, Math.cos(r) * 2.2);
+    side.rotation.y = r;
+    pf.add(side);
+  });
+  ctx.add(pf, 8, -24);
+
   return {
+    secrets: [
+      {
+        id: 'koyasan-sanko',
+        at: [8, -21],
+        r: 2.6,
+        trigger: 'linger',
+        seconds: 4,
+        hint: 'People are searching the ground beneath this pine…',
+        luck: 3,
+        card: {
+          title: 'Sanko-no-matsu, the three-needle pine',
+          jp: '三鈷の松',
+          body: [
+            'Before leaving China in 806, the monk Kūkai threw his sankosho, a three-pronged ritual vajra, toward Japan, praying it would land where he should build his monastery.',
+            'Back in Japan he found it caught in this pine on Mt. Kōya, and founded the monastery here.',
+            "Pine needles normally grow in pairs, but this tree's grow in threes like the vajra's prongs. Finding one is a lucky charm, and pilgrims search the ground for them.",
+          ],
+          ending: 'Among the fallen needles you find one with three prongs, and tuck it in your pocket.',
+        },
+      },
+    ],
     spawn: { x: 0, z: 74, rotY: 0 },
     bounds: { x0: -44, x1: 44, z0: -44, z1: 78 },
     anchors: {

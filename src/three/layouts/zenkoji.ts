@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills } from './types';
 import { offering, ritualSet } from './common';
 
+import { okaidan } from '../encounters/legends';
 /**
  * Zenkō-ji, Nagano.
  * Up the stone-paved Nakamise-dōri (7,777 paving stones, they say), through the Niōmon, past the six
@@ -78,7 +79,14 @@ export const zenkoji: Layout = (ctx) => {
     ctx.scene.add(cap);
   });
 
+  // entrance to the Okaidan passage (stairs down into the dark)
+  const od = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.6), new THREE.MeshStandardMaterial({ color: 0x050403, roughness: 1 }));
+  ctx.add(od, 8, -15.9, 0, 1.3);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.8), new THREE.MeshStandardMaterial({ color: 0xf2ead8 }));
+  ctx.add(sign, 6.2, -15.6, 0, 1.6);
+
   return {
+    encounters: [okaidan({ zone: (x, z) => Math.abs(x - 8) < 1.2 && z < -14.6, exit: { x: 8, z: -11, rotY: Math.PI } })],
     spawn: { x: 0, z: 128, rotY: 0 },
     bounds: { x0: -30, x1: 30, z0: -16, z1: 132 },
     walkable: (x, z) => (z > 90 ? Math.abs(x) < 7.5 : true),

@@ -38,6 +38,7 @@ interface ControlDockProps {
   onToggleAutoCycle: () => void;
   currentNearbySpot: { id: string; name: string; type: string } | null;
   children?: React.ReactNode;
+  onBow?: () => void;
 }
 
 export const ControlDock: React.FC<ControlDockProps> = ({
@@ -62,6 +63,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   onToggleAutoCycle,
   currentNearbySpot,
   children,
+  onBow,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'rituals' | 'teleport' | 'environment'>('rituals');
@@ -153,6 +155,17 @@ export const ControlDock: React.FC<ControlDockProps> = ({
             </button>
           </div>
 
+          {onBow && (
+            <button
+              onClick={onBow}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fbeedd] hover:bg-[#f6dfc0] border border-[#d6b98c] text-[#7c2d12] text-xs font-semibold cursor-pointer shrink-0"
+              title="Bow (B)"
+            >
+              <span aria-hidden>🙇</span>
+              <span>Bow</span>
+              <span className="hidden sm:inline pointer-coarse:hidden text-[10px] text-[#b45309] font-mono">B</span>
+            </button>
+          )}
           {currentNearbySpot && (
             <span className="hidden sm:flex text-[11px] bg-[#fdecea] border border-[#e8b4a8] text-[#b91c1c] px-2 py-0.5 rounded-full font-medium items-center gap-1 truncate max-w-[220px]">
               <Compass className="w-3 h-3 text-[#b91c1c] shrink-0" />

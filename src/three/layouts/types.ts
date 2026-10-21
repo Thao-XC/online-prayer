@@ -3,6 +3,7 @@ import type { Architecture } from '../kit/architecture';
 import type { Nature } from '../kit/nature';
 import type { KitMaterials } from '../kit/materials';
 import type { ShrineBuilder } from '../ShrineBuilder';
+import type { EncounterDef, StoryCard } from '../encounters/types';
 
 export type GroundFn = (x: number, z: number) => number;
 
@@ -30,6 +31,42 @@ export interface LayoutResult {
   walkable?: (x: number, z: number) => boolean;
   /** water surface that gently bobs (sea / pond) */
   bobbingWater?: THREE.Mesh;
+  /** secret worlds entered by stepping into water / hidden doorways */
+  encounters?: EncounterDef[];
+  /** small discoveries on the grounds */
+  secrets?: SecretDef[];
+  /** real-world manners that cost luck when ignored */
+  etiquette?: Etiquette;
+  /** objects that only appear at night (shown/hidden with the time of day) */
+  nightObjects?: THREE.Object3D[];
+}
+
+export interface SecretDef {
+  id: string;
+  at: [number, number];
+  /** trigger radius (default 3) */
+  r?: number;
+  /** enter: walk into it · linger: stay a few seconds · bow: bow there · night: be there at night ·
+   *  blindwalk: from `at`, walk to `to` with your eyes closed */
+  trigger: 'enter' | 'linger' | 'bow' | 'night' | 'blindwalk';
+  seconds?: number;
+  to?: [number, number];
+  /** caption shown the first time you come near, nudging without spoiling */
+  hint?: string;
+  luck: number;
+  card: StoryCard;
+  /** little animation when found (a deer bowing back, a cat waking…) */
+  onFound?: () => void;
+}
+
+export interface Etiquette {
+  /** centre lines of shrine approaches: [x0, z0, x1, z1] */
+  centerLines?: [number, number, number, number][];
+  /** places visitors must not go */
+  forbidden?: { test: (x: number, z: number) => boolean; reason: string; penalty?: number }[];
+  /** places where turning round is considered unlucky, e.g. Dazaifu's Bridge of the Past.
+   *  `facing` is the direction you should NOT look. */
+  noLookBack?: { test: (x: number, z: number) => boolean; facing: [number, number]; reason: string }[];
 }
 
 export interface LayoutCtx {

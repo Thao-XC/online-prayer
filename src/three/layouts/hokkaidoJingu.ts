@@ -65,7 +65,52 @@ export const hokkaidoJingu: Layout = (ctx) => {
   mt.position.set(-30, 0, -170);
   ctx.scene.add(mt);
 
+  // an Ezo squirrel at the foot of a spruce
+  const sq = new THREE.Group();
+  const fur = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: 0.9 });
+  const sb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), fur);
+  sb.scale.set(0.9, 1.1, 1.2);
+  sb.position.y = 0.2;
+  sq.add(sb);
+  const sh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), fur);
+  sh.position.set(0, 0.38, 0.1);
+  sq.add(sh);
+  [-0.05, 0.05].forEach((x) => {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 5), fur);
+    ear.position.set(x, 0.5, 0.08);
+    sq.add(ear);
+  });
+  const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.3, 4, 8), fur);
+  tail.position.set(0, 0.35, -0.2);
+  tail.rotation.x = 0.4;
+  sq.add(tail);
+  ctx.add(sq, -5.6, 60, 2.4, 0.4);
+  nat.animated.push({ update: (t) => (sq.position.y = ctx.ground(-5.6, 60) + 0.4 + Math.max(0, Math.sin(t * 5)) * 0.15 * (Math.sin(t * 0.7) > 0.6 ? 1 : 0)) });
+
   return {
+    secrets: [
+      {
+        id: 'hokkaido-squirrel',
+        at: [-4, 60],
+        r: 2.6,
+        trigger: 'linger',
+        seconds: 2,
+        luck: 2,
+        card: {
+          title: 'Ezo risu, the Hokkaidō squirrel',
+          jp: 'エゾリス',
+          body: [
+            "Maruyama Park's forest around the shrine is home to Ezo squirrels, a Hokkaidō subspecies of the red squirrel, with tufted ears in winter.",
+            "They don't hibernate. In deep snow you can see them darting between the spruces, digging up the nuts they buried in autumn.",
+          ],
+          ending: 'It freezes, stares at you, and bounds off into the spruces.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 108, 0, 0]],
+      forbidden: [{ test: (x, z) => Math.abs(x) < 11 && z < -7.5 && z > -20, reason: 'The worship hall is for priests. Please pray from in front.' }],
+    },
     spawn: { x: 0, z: 104, rotY: 0 },
     bounds: { x0: -28, x1: 28, z0: -28, z1: 108 },
     walkable: (x, z) => (z > 22 ? Math.abs(x) < 5 || (x < -6 && x > -16 && z < 32) : true),

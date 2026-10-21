@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills } from './types';
 import { offering, ritualSet, lanternRow } from './common';
 
+import { tenjinStorm } from '../encounters/legends';
 /**
  * Dazaifu Tenmangū, Fukuoka.
  * Through a shop-lined approach and stone torii to Shinji-ike, the pond shaped like the character 心
@@ -76,6 +77,32 @@ export const dazaifuTenmangu: Layout = (ctx) => {
   ctx.scene.add(mt);
 
   return {
+    encounters: [tenjinStorm({ zone: (x, z) => pond(x, z) && !(Math.abs(x) < 1.9 && z > 46 && z < 74), exit: { x: 0, z: 40, rotY: 0 } })],
+    secrets: [
+      {
+        id: 'dazaifu-ox',
+        at: [-5, 28],
+        r: 2,
+        trigger: 'linger',
+        seconds: 2.5,
+        hint: 'Visitors stop to rub this bronze ox…',
+        luck: 3,
+        card: {
+          title: 'The bronze ox of Tenjin',
+          jp: '御神牛',
+          body: [
+            'Oxen are Tenjin\'s messengers. Michizane was born in the year of the ox, and when he died, the ox pulling his coffin lay down and refused to move. He was buried on that spot, where the main hall now stands.',
+            'Rub the ox\'s head to grow wiser, or rub the part of the ox that matches what ails you. The heads are polished golden by millions of hands.',
+          ],
+          ending: 'You rub its gleaming head. You feel a little cleverer already.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 130, 0, 74], [0, 46, 0, 8]],
+      forbidden: [{ test: (x, z) => Math.abs(x) < 11 && z > -9 && z < 6, reason: 'The honden is the dwelling of the kami. Please pray from in front.' }],
+      noLookBack: [{ test: (x, z) => Math.abs(x) < 2 && z < 72 && z > 63, facing: [0, 1], reason: "On the Bridge of the Past, it's said you mustn't look back" }],
+    },
     spawn: { x: 0, z: 124, rotY: 0 },
     bounds: { x0: -30, x1: 30, z0: -12, z1: 128 },
     walkable: (x, z) => (pond(x, z) ? Math.abs(x) < 1.9 && z > 46 && z < 74 : true) && !(z > 95 && z < 129 && Math.abs(x) > 6.8),

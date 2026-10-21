@@ -67,7 +67,81 @@ export const nikkoToshogu: Layout = (ctx) => {
   ctx.scene.add(nat.forest('cedar', nat.scatter(200, { x0: -130, x1: 130, z0: -130, z1: 180 }, (x, z) => clear(x, z) || (Math.abs(x) < 10 && z >= 100), 13), [1.3, 1.8], ctx.ground));
   ctx.scene.add(nat.forest('maple', nat.scatter(20, { x0: -40, x1: 40, z0: -40, z1: 100 }, (x, z) => Math.abs(x) < 24, 5), [0.9, 1.1], ctx.ground));
 
+  // Sakashitamon, the little gate toward Ieyasu's tomb, with the Sleeping Cat carving above it
+  const sk = arch.gate({ w: 4, d: 2.6, h: 3, stories: 1, pillar: 'vermilion', wall: 'vermilion', roofTone: 'darkCopper', bracket: 'gold' });
+  ctx.add(sk, 22, -6, -Math.PI / 2);
+  {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 96;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#2f6b4f';
+    g.fillRect(0, 0, 256, 96);
+    g.fillStyle = '#f2efe6';
+    g.beginPath();
+    g.ellipse(128, 62, 70, 24, 0, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.arc(70, 50, 20, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#1a1a1a';
+    g.fillRect(58, 48, 9, 2);
+    g.fillRect(73, 48, 9, 2);
+    g.fillStyle = '#e88aa0';
+    [[150, 20], [180, 30], [210, 18]].forEach(([x, y]) => {
+      g.beginPath();
+      g.arc(x, y, 8, 0, Math.PI * 2);
+      g.fill();
+    });
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const cat = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.9), new THREE.MeshStandardMaterial({ map: tex }));
+    ctx.add(cat, 20.6, -6, -Math.PI / 2, 3.2);
+  }
+
   return {
+    secrets: [
+      {
+        id: 'nikko-nemuri-neko',
+        at: [19, -6],
+        r: 2.4,
+        trigger: 'linger',
+        seconds: 2.5,
+        hint: 'A small gate leads east, up toward the tomb. Look above it…',
+        luck: 3,
+        card: {
+          title: 'Nemuri-neko, the Sleeping Cat',
+          jp: '眠り猫',
+          body: [
+            "Above the gate to Ieyasu's tomb sleeps a small carved cat, attributed to the legendary carver Hidari Jingorō.",
+            'On the back of the same beam, sparrows play. Because the cat is asleep, the sparrows are safe: a picture of the peace the Tokugawa brought after a century of war.',
+            "Beyond the gate, 207 stone steps climb through the cedars to Tokugawa Ieyasu's resting place.",
+          ],
+          ending: 'You tiptoe past so as not to wake it.',
+        },
+      },
+      {
+        id: 'nikko-monkeys',
+        at: [13, 34],
+        r: 2.6,
+        trigger: 'linger',
+        seconds: 3,
+        luck: 2,
+        card: {
+          title: 'See no evil, hear no evil, speak no evil',
+          jp: '三猿',
+          body: [
+            'The famous three wise monkeys are carved on the Sacred Stable, where the shrine\'s sacred horse is kept. Monkeys were believed to protect horses.',
+            'They are one panel in a series of eight telling the story of a life. Here, as children, they learn to shut out evil.',
+          ],
+          ending: 'You cover your eyes, ears and mouth, just to see how it feels.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 100, 0, 24], [0, 18, 0, -6]],
+      forbidden: [{ test: (x, z) => Math.abs(x) < 12 && z < -12 && z > -27, reason: 'The worship hall is for priests. Please pray from in front.' }],
+    },
     spawn: { x: 0, z: 96, rotY: 0 },
     bounds: { x0: -26, x1: 26, z0: -30, z1: 100 },
     walkable: (x, z) => !(z > 9 && z < 11 && Math.abs(x) > 6.5 && Math.abs(x) < 26),

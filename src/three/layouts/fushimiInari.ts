@@ -107,7 +107,41 @@ export const fushimiInari: Layout = (ctx) => {
   mt.position.set(0, 0, -190);
   ctx.scene.add(mt);
 
+  // Omokaru-ishi: two stone lanterns with round stones on top, where the tunnels come out
+  [-1.4, 1.4].forEach((dx) => {
+    const l = arch.stoneLantern(1.8);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), ctx.m.granite);
+    ball.position.y = 2.05;
+    l.add(ball);
+    ctx.add(l, -18.9 + dx, -77.2);
+  });
+
   return {
+    secrets: [
+      {
+        id: 'fushimi-omokaru',
+        at: [-18.9, -76.5],
+        r: 2.4,
+        trigger: 'linger',
+        seconds: 3,
+        hint: 'Two little lanterns, each with a round stone on top…',
+        luck: 3,
+        card: {
+          title: 'Omokaru-ishi, the heavy-light stones',
+          jp: 'おもかる石',
+          body: [
+            'At the end of the Senbon Torii, beside the inner shrine, stand two stone lanterns topped with round stones.',
+            'Make a wish, then lift the stone. If it feels lighter than you expected, your wish will come true. If it feels heavier, it will take more effort.',
+            'The thousands of torii you just walked through were each donated by a person or company, in thanks for a wish granted.',
+          ],
+          ending: 'You lift the stone. It feels lighter than you expected.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 78, 0, 30], [0, 30, 0, 3]],
+      forbidden: [{ test: (x, z) => Math.abs(x) < 11.5 && z < 1.8 && z > -12.5, reason: 'The honden is the dwelling of the kami. Please pray from in front.' }],
+    },
     spawn: { x: 0, z: 74, rotY: 0 },
     bounds: { x0: -32, x1: 32, z0: -78, z1: 80 },
     anchors: {

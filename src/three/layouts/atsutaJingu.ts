@@ -26,7 +26,7 @@ export const atsutaJingu: Layout = (ctx) => {
   rope.rotation.x = Math.PI / 2;
   ctx.add(rope, 13, 34, 0, 3);
   // Nobunaga-bei
-  ctx.add(arch.tileWall(18, 2.6, 'ochre'), -30, 40, Math.PI / 2);
+  ctx.add(arch.tileWall(16, 2.6, 'ochre'), -17, 55.2);
 
   // Hongū: haiden at the fence line, shinmei-style main hall behind
   // front fence, open where the haiden stands
@@ -64,6 +64,46 @@ export const atsutaJingu: Layout = (ctx) => {
   ctx.scene.add(city);
 
   return {
+    secrets: [
+      {
+        id: 'atsuta-okusu',
+        at: [6.2, 34],
+        r: 2.6,
+        trigger: 'linger',
+        seconds: 4,
+        hint: 'This camphor is more than a thousand years old…',
+        luck: 2,
+        card: {
+          title: 'Ōkusu, the great camphor',
+          jp: '大楠',
+          body: [
+            'This sacred camphor is said to have been planted by the monk Kōbō Daishi (Kūkai) over a thousand years ago. People stand beside it to feel its quiet strength.',
+            'Atsuta Jingū keeps Kusanagi no Tsurugi, one of the three Imperial Regalia of Japan. No one is allowed to see it, not even the priests.',
+          ],
+          ending: 'You rest your hand near the bark and breathe slowly.',
+        },
+      },
+      {
+        id: 'atsuta-nobunaga',
+        at: [-17, 57],
+        r: 2.4,
+        trigger: 'linger',
+        seconds: 3,
+        luck: 2,
+        card: {
+          title: 'Nobunaga-bei, the warlord\'s wall',
+          jp: '信長塀',
+          body: [
+            'In 1560 the young Oda Nobunaga stopped here to pray for victory on his way to fight Imagawa Yoshimoto, whose army was many times larger.',
+            "He won the Battle of Okehazama, and in thanks donated this wall of clay and roof tiles. It is counted among Japan's three great earthen walls.",
+          ],
+          ending: 'You run your eyes along the layered tiles, built in thanks for a victory.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 110, 0, -6]],
+    },
     spawn: { x: 0, z: 106, rotY: 0 },
     bounds: { x0: -30, x1: 26, z0: -8, z1: 110 },
     walkable: (x, z) => (z > 10 ? Math.abs(x) < 7 || (x < -6 && x > -28 && Math.abs(z - 60) < 4) || (x > -16 && x < -6 && z < 28) : true),

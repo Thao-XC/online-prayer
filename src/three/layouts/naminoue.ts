@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { ramp } from './types';
 import { offering, ritualSet } from './common';
 
+import { niraiKanai } from '../encounters/legends';
 /**
  * Naminoue-gū, Naha (Okinawa).
  * Chief shrine of the Ryukyus, on a coral-limestone cliff above Naminoue beach and the East China Sea.
@@ -79,6 +80,30 @@ export const naminoue: Layout = (ctx) => {
   ctx.scene.add(city);
 
   return {
+    encounters: [niraiKanai({ zone: (x) => x < -63, exit: { x: -50, z: 0, rotY: -Math.PI / 2 } })],
+    secrets: [
+      {
+        id: 'naminoue-shisa',
+        at: [40, 4],
+        r: 2.4,
+        trigger: 'linger',
+        seconds: 2.5,
+        luck: 2,
+        card: {
+          title: 'Shisa, the lion-dogs of Okinawa',
+          jp: 'シーサー',
+          body: [
+            "Instead of komainu, Okinawa's shrines, gates and rooftops are guarded by shisa, lion-dogs that came to the Ryukyu Kingdom from China.",
+            'They usually come in pairs. The one with its mouth open frightens away evil, and the one with its mouth shut keeps good fortune in.',
+          ],
+          ending: 'You nod to both of them on the way past.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[60, 0, 12, 0]],
+      forbidden: [{ test: (x, z) => Math.abs(x + 16) < 5.6 && Math.abs(z) < 6.5, reason: 'The honden is the dwelling of the kami. Please pray from the haiden.' }],
+    },
     spawn: { x: 58, z: 0, rotY: Math.PI / 2 },
     bounds: { x0: -62, x1: 62, z0: -40, z1: 40 },
     walkable: (x, z) => x > cliffEdge + 0.5 || onStair(x, z) || (x < cliffEdge - 6 && x > -62),

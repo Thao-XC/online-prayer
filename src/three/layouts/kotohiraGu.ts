@@ -90,6 +90,45 @@ export const kotohiraGu: Layout = (ctx) => {
   ctx.scene.add(fuji);
 
   return {
+    secrets: [
+      {
+        id: 'kotohira-dog',
+        at: [5.5, 84],
+        r: 2.2,
+        trigger: 'linger',
+        seconds: 2.5,
+        hint: 'A little dog statue with a pouch around its neck…',
+        luck: 3,
+        card: {
+          title: 'Konpira-inu, the pilgrim dogs',
+          jp: 'こんぴら狗',
+          body: [
+            'In the Edo period a pilgrimage to Konpira was the trip of a lifetime. Those who could not make it sometimes sent their dog instead, with a pouch of money and a note round its neck saying "Going to Konpira".',
+            'Travellers along the road fed the dog and passed it on until it reached the shrine, received a charm, and was guided all the way home.',
+          ],
+          ending: 'You pat the bronze dog on the head. It has come a long way.',
+        },
+      },
+      {
+        id: 'kotohira-summit',
+        at: [0, 2],
+        r: 3,
+        trigger: 'enter',
+        luck: 2,
+        card: {
+          title: '785 steps',
+          jp: '御本宮まで七百八十五段',
+          body: [
+            'From the foot of the mountain to the main shrine is 785 stone steps. Konpira-san is the guardian of sailors and the sea, and its ema hall is hung with paintings and models of ships.',
+            'From the top you can look out over the Sanuki plain to Sanuki-Fuji, and on a clear day to the Seto Inland Sea.',
+          ],
+          ending: 'You made it to the top, out of breath and grinning.',
+        },
+      },
+    ],
+    etiquette: {
+      forbidden: [{ test: (x, z) => Math.abs(x) < 10 && z < -9.5 && z > -22, reason: 'The main hall is for priests. Please pray from in front.' }],
+    },
     spawn: { x: 0, z: 136, rotY: 0 },
     bounds: { x0: -26, x1: 26, z0: -33, z1: 140 },
     walkable: (x, z) => {

@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills } from './types';
 import { ritualSet, offering } from './common';
 
+import { ryuguJo } from '../encounters/legends';
 /**
  * Itsukushima Shrine, Miyajima.
  * Vermilion halls and corridors stand on piers over the tidal cove, facing the sea. The Ō-torii
@@ -110,6 +111,10 @@ export const itsukushima: Layout = (ctx) => {
   { const mt = nat.mountain(110, 55, 0x4a6440, 11); mt.position.set(190, 0, -110); ctx.scene.add(mt); }
 
   return {
+    encounters: [ryuguJo({ zone: (x, z) => !inDeck(x, z) && land(x, z) < -1, exit: { x: 0, z: 10, rotY: Math.PI } })],
+    etiquette: {
+      forbidden: [{ test: (x, z) => Math.abs(x) < 10 && z < -18 && z > -29.5, reason: 'The honden is the dwelling of the kami. Please pray from the haiden.' }],
+    },
     spawn: { x: 0, z: 12, rotY: Math.PI },
     bounds: { x0: -70, x1: 70, z0: -90, z1: 16 },
     walkable: (x, z) => inDeck(x, z) || land(x, z) > -1,

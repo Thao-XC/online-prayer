@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import type { Layout } from './types';
 import { hills } from './types';
 import { offering, ritualSet } from './common';
+import type { Architecture } from '../kit/architecture';
+import type { KitMaterials } from '../kit/materials';
 
+import { mirrorWorld } from '../encounters/legends';
 /**
  * Kinkaku-ji (Rokuon-ji), Kyoto.
  * The Golden Pavilion stands at the edge of Kyōko-chi, the Mirror Pond, dotted with pine-topped rock
@@ -41,6 +44,56 @@ export const kinkakuji: Layout = (ctx) => {
   });
 
   // The Golden Pavilion
+  const kin = goldenPavilion(arch, m);
+  kin.position.set(0, -0.6, -26);
+  ctx.scene.add(kin);
+
+  // Sōmon entrance gate and the path around the south shore
+  ctx.add(arch.gate({ w: 8, d: 4.5, h: 4.4, stories: 1, pillar: 'darkWood', wall: 'darkWood', roofTone: 'bark' }), 44, 46, Math.PI * 0.75);
+  const route: [number, number][] = [[54, 58], [44, 46], [32, 32], [14, 24], [0, 23], [-22, 21], [-40, 6], [-42, -16], [-30, -34], [-12, -38]];
+  ctx.path(route, 4.4, 'gravel');
+  ctx.path([[32, 32], [36, 10], [30, -24], [18, -34], [8, -38]], 3.4, 'gravel');
+  // viewing terrace on the south shore
+  const terrace = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 4), m.gravel);
+  ctx.add(terrace, 0, 22.5, 0, 0.1);
+
+  // Fudō-dō style prayer stop near the pavilion (offering box under a small roof)
+  const fudo = arch.hall({ w: 6, d: 5, wallH: 3, podium: 0.4, pillar: 'darkWood', wall: 'darkWood', front: 'doors', roof: { kind: 'irimoya', tone: 'bark', h: 2.6, gableTone: 'darkWood' }, overhang: 1.2 });
+  ctx.add(fudo, 30, -30, -Math.PI / 3);
+  offering(ctx, 26.5, -27.5, 0.4, 'temple', undefined, -Math.PI / 3);
+
+  ritualSet(ctx, { temizuya: [36, 42, Math.PI * 0.75], ema: [22, 30, -0.6], omikuji: [24, 36, -0.9] });
+
+  // Trees: pine, maple, cedar; Mt. Kinugasa behind
+  const keep = (x: number, z: number) => pondT(x, z) < 1.25 || (x > 8 && x < 60 && z > 18 && z < 64) || (x > 14 && x < 40 && z < -18 && z > -40) || (Math.abs(x) < 14 && z < -16 && z > -38);
+  ctx.scene.add(nat.forest('pine', nat.scatter(60, { x0: -70, x1: 70, z0: -60, z1: 50 }, keep, 3), [0.9, 1.3], ctx.ground));
+  ctx.scene.add(nat.forest('maple', nat.scatter(40, { x0: -70, x1: 70, z0: -60, z1: 60 }, keep, 31), [0.8, 1.2], ctx.ground));
+  ctx.scene.add(nat.forest('cedar', nat.scatter(110, { x0: -130, x1: 130, z0: -160, z1: -42 }, keep, 7), [1, 1.4], ctx.ground));
+  const mt = nat.mountain(120, 75, 0x3b5533, 4);
+  mt.position.set(-10, 0, -190);
+  ctx.scene.add(mt);
+
+  return {
+    encounters: [mirrorWorld({ zone: (x, z) => pondT(x, z) < 1, exit: { x: 0, z: 23, rotY: 0 } })],
+    spawn: { x: 0, z: 23, rotY: 0 },
+    bounds: { x0: -48, x1: 58, z0: -44, z1: 62 },
+    walkable: (x, z) => pondT(x, z) > 1.04,
+    anchors: {
+      torii: { at: [40, 42], look: [44, 46] },
+      temizuya: { at: [33, 39], look: [36, 42] },
+      'spot-pavilion': { at: [0, 22], look: [0, -26] },
+      haiden: { at: [21, -22], look: [30, -30] },
+      ema: { at: [19, 27], look: [22, 30] },
+      omikuji: { at: [21, 33], look: [24, 36] },
+    },
+    particles: 'none',
+    fog: 0.6,
+    orbit: { x: 0, z: -10, r: 46, y: 16 },
+  };
+};
+
+/** Kinkaku (three floors, three styles, gold leaf, phoenix on top). Origin at ground level. */
+export function goldenPavilion(arch: Architecture, m: KitMaterials): THREE.Group {
   const kin = new THREE.Group();
   const base = new THREE.Mesh(new THREE.BoxGeometry(17, 1.2, 13), m.granite);
   base.position.y = 0.6;
@@ -97,48 +150,5 @@ export const kinkakuji: Layout = (ctx) => {
   ph.add(tail);
   ph.position.y = y3 + 3.2 + 3.9;
   kin.add(ph);
-  kin.position.set(0, -0.6, -26);
-  ctx.scene.add(kin);
-
-  // Sōmon entrance gate and the path around the south shore
-  ctx.add(arch.gate({ w: 8, d: 4.5, h: 4.4, stories: 1, pillar: 'darkWood', wall: 'darkWood', roofTone: 'bark' }), 44, 46, Math.PI * 0.75);
-  const route: [number, number][] = [[54, 58], [44, 46], [32, 32], [14, 24], [0, 23], [-22, 21], [-40, 6], [-42, -16], [-30, -34], [-12, -38]];
-  ctx.path(route, 4.4, 'gravel');
-  ctx.path([[32, 32], [36, 10], [30, -24], [18, -34], [8, -38]], 3.4, 'gravel');
-  // viewing terrace on the south shore
-  const terrace = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 4), m.gravel);
-  ctx.add(terrace, 0, 22.5, 0, 0.1);
-
-  // Fudō-dō style prayer stop near the pavilion (offering box under a small roof)
-  const fudo = arch.hall({ w: 6, d: 5, wallH: 3, podium: 0.4, pillar: 'darkWood', wall: 'darkWood', front: 'doors', roof: { kind: 'irimoya', tone: 'bark', h: 2.6, gableTone: 'darkWood' }, overhang: 1.2 });
-  ctx.add(fudo, 30, -30, -Math.PI / 3);
-  offering(ctx, 26.5, -27.5, 0.4, 'temple', undefined, -Math.PI / 3);
-
-  ritualSet(ctx, { temizuya: [36, 42, Math.PI * 0.75], ema: [22, 30, -0.6], omikuji: [24, 36, -0.9] });
-
-  // Trees: pine, maple, cedar; Mt. Kinugasa behind
-  const keep = (x: number, z: number) => pondT(x, z) < 1.25 || (x > 8 && x < 60 && z > 18 && z < 64) || (x > 14 && x < 40 && z < -18 && z > -40) || (Math.abs(x) < 14 && z < -16 && z > -38);
-  ctx.scene.add(nat.forest('pine', nat.scatter(60, { x0: -70, x1: 70, z0: -60, z1: 50 }, keep, 3), [0.9, 1.3], ctx.ground));
-  ctx.scene.add(nat.forest('maple', nat.scatter(40, { x0: -70, x1: 70, z0: -60, z1: 60 }, keep, 31), [0.8, 1.2], ctx.ground));
-  ctx.scene.add(nat.forest('cedar', nat.scatter(110, { x0: -130, x1: 130, z0: -160, z1: -42 }, keep, 7), [1, 1.4], ctx.ground));
-  const mt = nat.mountain(120, 75, 0x3b5533, 4);
-  mt.position.set(-10, 0, -190);
-  ctx.scene.add(mt);
-
-  return {
-    spawn: { x: 0, z: 23, rotY: 0 },
-    bounds: { x0: -48, x1: 58, z0: -44, z1: 62 },
-    walkable: (x, z) => pondT(x, z) > 1.04,
-    anchors: {
-      torii: { at: [40, 42], look: [44, 46] },
-      temizuya: { at: [33, 39], look: [36, 42] },
-      'spot-pavilion': { at: [0, 22], look: [0, -26] },
-      haiden: { at: [21, -22], look: [30, -30] },
-      ema: { at: [19, 27], look: [22, 30] },
-      omikuji: { at: [21, 33], look: [24, 36] },
-    },
-    particles: 'none',
-    fog: 0.6,
-    orbit: { x: 0, z: -10, r: 46, y: 16 },
-  };
-};
+  return kin;
+}

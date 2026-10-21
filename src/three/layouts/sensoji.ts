@@ -106,7 +106,58 @@ export const sensoji: Layout = (ctx) => {
   tree.add(ant);
   ctx.add(tree, 130, -110);
 
+  // the carved dragon under the Kaminarimon lantern
+  {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#2a1a10';
+    g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = '#c9a25a';
+    g.lineWidth = 10;
+    g.lineCap = 'round';
+    g.beginPath();
+    for (let a = 0; a < Math.PI * 3.2; a += 0.1) {
+      const r = 20 + a * 9;
+      g.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r);
+    }
+    g.stroke();
+    g.fillStyle = '#c9a25a';
+    g.beginPath();
+    g.arc(128 + 9 * 10, 128 - 20, 14, 0, Math.PI * 2);
+    g.fill();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.75, 24), new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide }));
+    disc.rotation.x = Math.PI / 2;
+    ctx.add(disc, 0, 90, 0, 1.38);
+  }
+
   return {
+    secrets: [
+      {
+        id: 'sensoji-dragon',
+        at: [0, 90],
+        r: 1.8,
+        trigger: 'linger',
+        seconds: 2.5,
+        hint: 'Stand right under the great lantern…',
+        luck: 2,
+        card: {
+          title: 'The dragon under the lantern',
+          jp: '雷門の龍',
+          body: [
+            "Look up! Carved into the base of Kaminarimon's giant lantern is a wooden dragon. Most visitors never notice it.",
+            'The lantern weighs about 700 kg. It is made by lantern makers in Kyoto and renewed roughly every ten years. The gate itself was rebuilt in 1960, paid for by the founder of Panasonic, Kōnosuke Matsushita.',
+            'Fūjin, god of wind, and Raijin, god of thunder, stand in the gate to protect the temple, which has burned and been rebuilt many times.',
+          ],
+          ending: 'You crane your neck: there it is, coiled in the dark wood.',
+        },
+      },
+    ],
+    etiquette: {
+      forbidden: [{ test: (x, z) => Math.abs(x + 24) < 5 && Math.abs(z + 12) < 5, reason: 'The pagoda enshrines relics of the Buddha and is closed to visitors.', penalty: 2 }],
+    },
     spawn: { x: 0, z: 104, rotY: 0 },
     bounds: { x0: -34, x1: 34, z0: -30, z1: 108 },
     walkable: (x, z) => (z > 14 && z < 84 ? Math.abs(x) < 6.8 : true),

@@ -79,10 +79,50 @@ export const meijiJingu: Layout = (ctx) => {
   ctx.scene.add(nat.forest('cedar', nat.scatter(90, { x0: -110, x1: 110, z0: -120, z1: 150 }, clear, 17), [0.9, 1.3], ctx.ground));
   ctx.scene.add(nat.forest('camphor', nat.scatter(24, { x0: -60, x1: 60, z0: -80, z1: 130 }, clear, 29), [0.8, 1.0], ctx.ground));
 
+  // Kiyomasa's Well, down a little side path into the forest
+  ctx.path([[-7, 40], [-21, 40]], 2.6, 'gravel');
+  const well = new THREE.Group();
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.3, 0.6, 20, 1, true), m.granite);
+  rim.material = m.granite.clone();
+  (rim.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+  rim.position.y = 0.3;
+  well.add(rim);
+  const wwater = new THREE.Mesh(new THREE.CircleGeometry(1.15, 20), new THREE.MeshStandardMaterial({ color: 0x3f7f86, roughness: 0.2 }));
+  wwater.rotation.x = -Math.PI / 2;
+  wwater.position.y = 0.4;
+  well.add(wwater);
+  ctx.add(well, -22, 40);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.6, 0.6), m.wood.cypress);
+  ctx.add(post, -8, 42, 0, 0.8);
+
   return {
+    secrets: [
+      {
+        id: 'meiji-kiyomasa',
+        at: [-20, 40],
+        r: 2.6,
+        trigger: 'linger',
+        seconds: 3,
+        luck: 3,
+        card: {
+          title: "Kiyomasa's Well",
+          jp: '清正井',
+          body: [
+            "Hidden in the shrine's inner garden is a spring said to have been dug by the samurai general Katō Kiyomasa in the early 1600s, when the land was a daimyō's estate.",
+            'Clear water wells up all year round at about 15 °C, around 60 litres a minute, and the well has become one of Tokyo\'s best-known "power spots".',
+            'The whole forest around you was planted by hand: about 100,000 trees donated from all over Japan in 1920, designed to grow into a self-sustaining wood.',
+          ],
+          ending: 'You watch the spring trembling up through the sand, and feel oddly calm.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[-10, 112, -4, 80], [-4, 80, 0, 60], [0, 60, 0, -8]],
+      forbidden: [{ test: (x, z) => Math.abs(x) < 13 && z < -25 && z > -38, reason: 'The main hall is for the kami and priests. Please pray from in front.' }],
+    },
     spawn: { x: -9.5, z: 108, rotY: -Math.atan2(6, 30) },
     bounds: { x0: -26, x1: 26, z0: -44, z1: 114 },
-    walkable: (x, z) => (Math.abs(x - pathX(z)) < 7.5 && z > 6) || (Math.abs(x) < 24.5 && z <= 10 && z > -42) || (x > -15 && x < -6 && z > 10 && z < 22),
+    walkable: (x, z) => (Math.abs(x - pathX(z)) < 7.5 && z > 6) || (Math.abs(x) < 24.5 && z <= 10 && z > -42) || (x > -15 && x < -6 && z > 10 && z < 22) || (x > -22 && x < -6 && Math.abs(z - 40) < 1.6),
     anchors: {
       torii: { at: [-3, 72], look: [0, 28] },
       temizuya: { at: [-7.5, 16], look: [-11, 16] },

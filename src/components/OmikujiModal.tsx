@@ -10,12 +10,15 @@ interface OmikujiModalProps {
   shrine: ShrineData;
   onClose: () => void;
   onSaveFortune: (fortune: OmikujiFortune) => void;
+  /** 0–100: higher luck tilts the draw toward better fortunes */
+  luck?: number;
 }
 
 export const OmikujiModal: React.FC<OmikujiModalProps> = ({
   shrine,
   onClose,
   onSaveFortune,
+  luck = 50,
 }) => {
   const [phase, setPhase] = useState<'shake' | 'shaking' | 'revealed'>('shake');
   const [fortune, setFortune] = useState<OmikujiFortune | null>(null);
@@ -85,7 +88,17 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
   const fallbackRandomDraw = () => {
     setTimeout(() => {
       // Pick random sample
-      const randomBase = SAMPLE_FORTUNES[Math.floor(Math.random() * SAMPLE_FORTUNES.length)];
+      // Luck tilts the odds: rank 0 (大吉) gains weight as luck rises, 凶 loses it
+      const order = ['Dai-kichi', 'Chū-kichi', 'Shō-kichi', 'Kichi', 'Sue-kichi', 'Kyō'];
+      const tilt = (luck - 50) / 50;
+      const weights = SAMPLE_FORTUNES.map((f) => {
+        const r = Math.max(0, order.findIndex((o) => f.rank.startsWith(o)));
+        return Math.exp(tilt * (2.5 - r) * 0.6);
+      });
+      let pick = Math.random() * weights.reduce((a, b) => a + b, 0);
+      let idx = 0;
+      while (idx < weights.length - 1 && pick > weights[idx]) pick -= weights[idx++];
+      const randomBase = SAMPLE_FORTUNES[idx];
       const drawnFortune: OmikujiFortune = {
         ...randomBase,
         id: `omi-${Date.now()}`,

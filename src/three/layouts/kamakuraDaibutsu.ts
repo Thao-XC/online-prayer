@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills } from './types';
 import { offering, ritualSet } from './common';
 
+import { insideDaibutsu } from '../encounters/legends';
 /**
  * Kōtoku-in (Kamakura Daibutsu), Kanagawa.
  * Through the Niōmon into a broad gravel court where the 13 m bronze Amida Buddha sits in the open air
@@ -54,10 +55,20 @@ export const kamakuraDaibutsu: Layout = (ctx) => {
   mt.position.set(0, 0, -120);
   ctx.scene.add(mt);
 
+  // the small door into the Buddha (on the back of its base)
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.9), new THREE.MeshStandardMaterial({ color: 0x15130f, roughness: 1 }));
+  ctx.add(door, 0, -17.2, Math.PI, 1.0);
+  const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.15, 0.2), m.bronzeDark);
+  ctx.add(doorFrame, 0, -17.25, 0, 2.0);
+
   return {
+    encounters: [insideDaibutsu({ zone: (x, z) => Math.abs(x) < 1.3 && z < -16.6 && z > -19, exit: { x: 0, z: -21, rotY: Math.PI } })],
+    etiquette: {
+      forbidden: [{ test: (x, z) => Math.hypot(x, z + 12) < 6, reason: "Please don't climb on the Great Buddha." }],
+    },
     spawn: { x: 0, z: 96, rotY: 0 },
     bounds: { x0: -26, x1: 26, z0: -26, z1: 100 },
-    walkable: (x, z) => Math.hypot(x, z + 12) > 9,
+    walkable: (x, z) => Math.hypot(x, z + 12) > 5.8,
     anchors: {
       torii: { at: [0, 72], look: [0, 64] },
       temizuya: { at: [-8.5, 40], look: [-12, 40] },

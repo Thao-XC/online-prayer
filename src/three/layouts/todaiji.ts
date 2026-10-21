@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills, ramp } from './types';
 import { offering, ritualSet } from './common';
 
+import { unemeGhost } from '../encounters/legends';
 /**
  * Tōdai-ji, Nara.
  * Deer greet you on the approach to the Nandaimon, the colossal two-storey unpainted gate guarded by
@@ -65,9 +66,29 @@ export const todaiji: Layout = (ctx) => {
   ritualSet(ctx, { temizuya: [-14, 24, 0.4], ema: [14, 18, -0.4], omikuji: [-14, 14, 0.4] });
 
   // Deer! On the approach and in the court
-  [[-6, 108, 0.4], [5, 102, 2.6], [-3, 96, 1.2], [8, 92, 3.8], [-9, 70, 0.2], [6, 64, 2.2], [-4, 50, 4], [12, 6, 1], [-16, 2, 2.8], [3, 112, 5]].forEach(([x, z, r]) =>
+  const deer = [[-6, 108, 0.4], [5, 102, 2.6], [-3, 96, 1.2], [8, 92, 3.8], [-9, 70, 0.2], [6, 64, 2.2], [-4, 50, 4], [12, 6, 1], [-16, 2, 2.8], [3, 112, 5]].map(([x, z, r]) =>
     ctx.add(nat.figure('deer'), x, z, r)
   );
+  // when you bow, nearby deer turn to you and bow back
+  let deerBow = -1;
+  const deerYaw = deer.map((d) => d.rotation.y);
+  nat.animated.push({
+    update: (t) => {
+      if (deerBow < 0) {
+        deerBow = Number.NaN;
+        return;
+      }
+      if (Number.isNaN(deerBow)) return;
+      const k = t - deerBow;
+      deer.forEach((d, i) => {
+        if (d.position.z < 40) return;
+        d.rotation.y = deerYaw[i] + (Math.PI - deerYaw[i] - (d.position.x > 0 ? 0.3 : -0.3)) * Math.min(1, k / 0.8);
+        d.rotation.x = k > 0.8 && k < 2.4 ? Math.sin(((k - 0.8) / 1.6) * Math.PI * 2) * 0.25 : 0;
+      });
+      if (k > 2.6) deerBow = Number.NaN;
+    },
+  });
+  const startDeerBow = () => (deerBow = performance.now() / 1000);
 
   const clear = (x: number, z: number) => (Math.abs(x) < 14 && z > 34) || (Math.abs(x) < 42 && z < 40 && z > -62) || pond(x, z);
   ctx.scene.add(nat.forest('pine', nat.scatter(40, { x0: -80, x1: 80, z0: 40, z1: 130 }, clear, 3), [1, 1.4], ctx.ground));
@@ -77,14 +98,65 @@ export const todaiji: Layout = (ctx) => {
   mt.position.set(60, 0, -190);
   ctx.scene.add(mt);
 
+  // the pillar with a hole the size of the Buddha's nostril (hashira-kuguri)
+  const pil = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 12.4, 16), m.wood.darkWood);
+  top.position.y = 0.6 + 6.2;
+  pil.add(top);
+  [-1, 1].forEach((s) => {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.6, 1.4), m.wood.darkWood);
+    side.position.set(s * 0.5, 0.3, 0);
+    pil.add(side);
+  });
+  ctx.add(pil, 10, -46, 0, POD);
+
   return {
+    encounters: [unemeGhost({ zone: (x, z) => pond(x, z), exit: { x: -27, z: 42, rotY: Math.atan2(13, -14) } })],
+    secrets: [
+      {
+        id: 'nara-deer-bow',
+        at: [0, 100],
+        r: 14,
+        trigger: 'bow',
+        luck: 3,
+        onFound: () => startDeerBow(),
+        card: {
+          title: 'The bowing deer of Nara',
+          jp: '奈良の鹿',
+          body: [
+            'More than a thousand deer roam freely around Tōdai-ji and Nara Park. They are protected as a National Natural Monument and are traditionally seen as messengers of the gods of nearby Kasuga Taisha.',
+            'Bow to a deer and it will often bow back. Partly that is good manners, and partly it has learned that bowing gets rice crackers (shika-senbei).',
+          ],
+          ending: 'You bow. The deer looks at you thoughtfully, and bows back.',
+        },
+      },
+      {
+        id: 'todaiji-pillar',
+        at: [10, -46],
+        r: 0.9,
+        trigger: 'enter',
+        hint: 'One pillar behind the Buddha has a small square hole at its base…',
+        luck: 3,
+        card: {
+          title: 'Hashira-kuguri: through the Buddha\'s nostril',
+          jp: '柱くぐり',
+          body: [
+            "One of the great hall's pillars has a hole at its base the same size as one of the Great Buddha's nostrils, about 30 by 37 centimetres.",
+            'Squeeze through it, and you are promised enlightenment in your next life, or at least good luck for the year. Children slip through easily, and adults get stuck to everyone\'s amusement.',
+          ],
+          ending: 'Some wriggling, some laughter, and you are through.',
+        },
+      },
+    ],
+    etiquette: {
+      forbidden: [{ test: (x, z) => Math.hypot(x, z + 42) < 7.8, reason: 'Please don\'t climb on the Great Buddha.' }],
+    },
     spawn: { x: 0, z: 118, rotY: 0 },
     bounds: { x0: -34, x1: 34, z0: -52, z1: 122 },
     walkable: (x, z) =>
       !pond(x, z) &&
       !(z < -18.4 && z > -19.8 && Math.abs(x) > 4.4) && // front wall, doorway open
       !(z <= -19.8 && (Math.abs(x) > 20.6 || z < -51.5)) && // inside the hall only
-      Math.hypot(x, z + 42) > 7.8 && // not into the Buddha
  !(z > 31 && z < 37 && Math.abs(x) > 9 && Math.abs(x) < 36),
     anchors: {
       torii: { at: [0, 92], look: [0, 84] },

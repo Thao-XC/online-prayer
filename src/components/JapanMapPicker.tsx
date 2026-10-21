@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { SHRINES } from '../data/shrinesData';
 import { ShrineData, ShrineType } from '../types/shrine';
 import { soundService } from '../services/soundService';
+import { LuckChip } from './LuckAndLegends';
 import { MAP_W, MAP_H, JAPAN_MAINLAND_PATH, OKINAWA_INSET, GRATICULE, MAP_LABELS } from '../data/japanGeo';
 import {
   MapPin,
@@ -41,6 +42,7 @@ interface JapanMapPickerProps {
   onOpenGoshuin: () => void;
   goshuinCount: number;
   onOpenDailyPilgrimage: () => void;
+  onOpenLuck?: () => void;
   dailyProgress: { completed: number; total: number; streak: number };
 }
 
@@ -78,6 +80,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   onOpenGoshuin,
   goshuinCount,
   onOpenDailyPilgrimage,
+  onOpenLuck,
   dailyProgress,
 }) => {
   const [selectedId, setSelectedId] = useState<string>(SHRINES[0].id);
@@ -527,6 +530,8 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               <span className="hidden md:inline">Directory ({SHRINES.length})</span>
             </button>
           </div>
+
+          {onOpenLuck && <LuckChip onClick={onOpenLuck} compact />}
 
           {/* Daily Pilgrimage Mission Button */}
           <button

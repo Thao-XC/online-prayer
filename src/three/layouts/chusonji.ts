@@ -84,7 +84,41 @@ export const chusonji: Layout = (ctx) => {
   ctx.scene.add(nat.forest('cedar', nat.scatter(200, { x0: -130, x1: 130, z0: -130, z1: 160 }, clear, 9), [1.3, 1.8], ctx.ground));
   ctx.scene.add(nat.forest('ginkgo', [[-14, 36], [16, 38], [-20, 4], [20, -10], [-30, -10]], [1.1, 1.3], ctx.ground));
 
+  // Bashō's haiku stone, with a small seated statue of the poet
+  const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1, 0), m.rock);
+  stone.scale.set(0.6, 1.2, 0.35);
+  ctx.add(stone, -12, -4, 0.4, 1.1);
+  const basho = new THREE.Group();
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.0, 10), new THREE.MeshStandardMaterial({ color: 0x5b5a52, roughness: 0.9 }));
+  robe.position.y = 0.5;
+  basho.add(robe);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), robe.material);
+  head.position.y = 1.15;
+  basho.add(head);
+  ctx.add(basho, -14.2, -3, 0.6, 0.3);
+
   return {
+    secrets: [
+      {
+        id: 'chusonji-basho',
+        at: [-12, -2],
+        r: 2.4,
+        trigger: 'linger',
+        seconds: 3,
+        hint: 'A stone carved with a poem…',
+        luck: 3,
+        card: {
+          title: "Bashō's haiku",
+          jp: '五月雨の降り残してや光堂',
+          body: [
+            'In 1689 the poet Matsuo Bashō came to Hiraizumi on the journey he wrote up as The Narrow Road to the Deep North. Of the golden hall he wrote:',
+            '"Samidare no / furinokoshite ya / hikaridō" — "The early-summer rains / have left it untouched: / the Hall of Light."',
+            'Five centuries of rain and snow had fallen on Hiraizumi, but the Konjikidō still shone.',
+          ],
+          ending: 'You read the poem twice, and look back at the golden hall.',
+        },
+      },
+    ],
     spawn: { x: slopeX(124), z: 124, rotY: 0 },
     bounds: { x0: -36, x1: 34, z0: -16, z1: 128 },
     walkable: (x, z) => (z > 40 ? Math.abs(x - slopeX(z)) < 3.4 : !(Math.abs(x) < 9 && z < -15.4 && Math.abs(x) > 6)),

@@ -99,7 +99,69 @@ export const izumoTaisha: Layout = (ctx) => {
   mt.position.set(0, 0, -200);
   ctx.scene.add(mt);
 
+  // Jūkusha: two long halls where the gods of all Japan lodge in Kamiari-zuki
+  [-21, 21].forEach((x) => {
+    const j = arch.hall({ w: 26, d: 4, wallH: 2.6, podium: 0.4, pillar: 'cypress', wall: 'cypress', front: 'doors', veranda: false, roof: { kind: 'gable', tone: 'copper', h: 2.2, gableTone: 'cypress' }, overhang: 1 });
+    ctx.add(j, x, -28, Math.PI / 2);
+  });
+  // the gathered gods, as drifting lights (night only)
+  const gods = new THREE.Group();
+  [-21, 21, 0].forEach((x, i) => {
+    const orbs = new THREE.Group();
+    const n = i === 2 ? 30 : 22;
+    for (let k = 0; k < n; k++) {
+      const o = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe7a8 }));
+      o.position.set((Math.random() - 0.5) * (i === 2 ? 30 : 6), 2 + Math.random() * 6, (Math.random() - 0.5) * 26);
+      o.userData.base = o.position.clone();
+      orbs.add(o);
+    }
+    orbs.position.set(x, 0, i === 2 ? -6 : -28);
+    gods.add(orbs);
+  });
+  const godLight = new THREE.PointLight(0xffd58a, 30, 50, 1.4);
+  godLight.position.set(0, 8, -14);
+  gods.add(godLight);
+  ctx.scene.add(gods);
+  gods.visible = false;
+  nat.animated.push({
+    update: (t) =>
+      gods.children.forEach((grp) =>
+        grp.children.forEach((o, k) => {
+          const b = o.userData.base as THREE.Vector3 | undefined;
+          if (b) o.position.set(b.x + Math.sin(t * 0.5 + k) * 0.8, b.y + Math.sin(t * 0.8 + k * 1.3) * 0.6, b.z + Math.cos(t * 0.4 + k) * 0.8);
+        })
+      ),
+  });
+
   return {
+    nightObjects: [gods],
+    secrets: [
+      {
+        id: 'izumo-kamiari',
+        at: [10, 2],
+        r: 14,
+        trigger: 'night',
+        hint: 'Long empty halls stand on either side of the main shrine…',
+        luck: 4,
+        card: {
+          title: 'Kamiari-zuki: the month the gods gather',
+          jp: '神在月',
+          body: [
+            'Each year in the tenth month of the old calendar, the "eight million gods" of Japan leave their shrines and gather at Izumo to decide the fates of the coming year, above all who will meet and marry whom.',
+            'Everywhere else it is Kannazuki, "the month without gods". Only here in Izumo is it Kamiari-zuki, "the month with gods". They stay in the long Jūkusha halls on either side of the main shrine.',
+            'Izumo Taisha has its own way to pray: two bows, four claps, one bow.',
+          ],
+          ending: 'Lights drift over the long halls. The gods have arrived.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 116, 0, 30]],
+      forbidden: [
+        { test: (x, z) => Math.abs(x) < 17 && z < -13 && z > -39, reason: "The main hall's enclosure is for priests. Please pray from outside the fence." },
+        { test: (x, z) => Math.abs(x) < 9 && z > -2 && z < 10.5, reason: 'Please pray from in front of the haiden, not inside it.' },
+      ],
+    },
     spawn: { x: 0, z: 110, rotY: 0 },
     bounds: { x0: -50, x1: 24, z0: -12, z1: 114 },
     anchors: {

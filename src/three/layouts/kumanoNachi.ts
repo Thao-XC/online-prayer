@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills, ramp } from './types';
 import { offering, ritualSet } from './common';
 
+import { fudoFalls } from '../encounters/legends';
 /**
  * Kumano Nachi Taisha & Seiganto-ji, Wakayama.
  * Up hundreds of mossy stone steps through the forest to the vermilion Kumano-style shrine halls, the
@@ -112,6 +113,31 @@ export const kumanoNachi: Layout = (ctx) => {
 
   const poolC: [number, number] = [70 + Math.sin(fallsRot) * 12.6, -140 + Math.cos(fallsRot) * 12.6];
   return {
+    encounters: [fudoFalls({ zone: (x, z) => Math.hypot(x - poolC[0], z - poolC[1]) < 14, exit: { x: 62, z: -112, rotY: Math.atan2(-(poolC[0] - 62), -(poolC[1] + 112)) } })],
+    secrets: [
+      {
+        id: 'nachi-yatagarasu',
+        at: [5.5, 55],
+        r: 2.2,
+        trigger: 'linger',
+        seconds: 2.5,
+        hint: 'A black crow on a stone… does it have three legs?',
+        luck: 3,
+        card: {
+          title: 'Yatagarasu, the three-legged crow',
+          jp: '八咫烏',
+          body: [
+            'In the Kojiki, the gods sent a great crow, Yatagarasu, to guide the legendary first emperor, Jimmu, through the trackless Kumano mountains to Yamato.',
+            "The crow became Kumano's messenger and a symbol of guidance. Today it is also the emblem of the Japan Football Association, guiding the ball to the goal.",
+          ],
+          ending: 'The crow stares back with its head cocked, as if to say: this way.',
+        },
+      },
+    ],
+    etiquette: {
+      centerLines: [[0, 116, 0, 60]],
+      forbidden: [{ test: (x, z) => x > -31.5 && x < 0.5 && z > -10 && z < -1.5, reason: 'These are the halls of the Kumano gods. Please pray from the worship hall in front.' }],
+    },
     // the classic view: pagoda on the left, the falls rising behind on the right
     spawn: { x: 46, z: 6, rotY: Math.atan2(-(16 - 46), -(-100 - 6)) },
     bounds: { x0: -36, x1: 72, z0: -124, z1: 116 },

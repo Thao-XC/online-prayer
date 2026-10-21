@@ -3,6 +3,7 @@ import type { Layout } from './types';
 import { hills, ramp } from './types';
 import { offering, ritualSet } from './common';
 
+import { seiryuDragon } from '../encounters/legends';
 /**
  * Kiyomizu-dera, Kyoto (Higashiyama).
  * Up the shop-lined Kiyomizu-zaka slope to the vermilion Niōmon on its stone steps, past the Saimon and
@@ -100,6 +101,16 @@ export const kiyomizudera: Layout = (ctx) => {
   ctx.path([[-20, 30], [-40, 30], [-44, 30]], 3.4, 'paving', 0.08);
 
   ritualSet(ctx, { temizuya: [12, 32, -0.5], ema: [8, 2, -0.8], omikuji: [10, -6, -1.2] });
+  // Jishu Shrine (god of love and matchmaking) and its two love-fortune stones
+  const jishu = arch.hall({ w: 8, d: 5, wallH: 3, podium: 0.6, pillar: 'vermilion', wall: 'plaster', front: 'lattice', roof: { kind: 'irimoya', tone: 'bark', h: 3, gableTone: 'vermilion' }, overhang: 1.4, bracket: 'gold' });
+  ctx.add(jishu, 11, -20.5);
+  [6, 16].forEach((x) => {
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.7, 9), m.granite);
+    ctx.add(st, x, -15, 0, 0.35);
+    const rope = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 6, 16), m.rope);
+    rope.rotation.x = Math.PI / 2;
+    ctx.add(rope, x, -15, 0, 0.55);
+  });
 
   // Maples and cedars on the slopes; Kyoto's rooftops far below
   const clear = (x: number, z: number) => (Math.abs(x) < 16 && z > 4) || (x > -48 && x < 22 && Math.abs(z) < 16) || inOtowaPath(x, z) || (x < -27 && x > -50 && Math.abs(z) < 14);
@@ -116,6 +127,28 @@ export const kiyomizudera: Layout = (ctx) => {
   ctx.scene.add(city);
 
   return {
+    encounters: [seiryuDragon({ zone: (x, z) => x < -43 && z > 24 && z < 36, exit: { x: -36, z: 30, rotY: -Math.PI / 2 } })],
+    secrets: [
+      {
+        id: 'kiyomizu-koi',
+        at: [6, -15],
+        to: [16, -15],
+        r: 1.3,
+        trigger: 'blindwalk',
+        hint: 'Two stones, about ten metres apart, in front of the little vermilion shrine…',
+        luck: 3,
+        card: {
+          title: 'The love-fortune stones of Jishu Shrine',
+          jp: '恋占いの石',
+          body: [
+            'Behind the main hall stands Jishu Shrine, dedicated to the god of love and good matches.',
+            'Close your eyes at one stone and walk to the other. Reach it, and your love will come true. Reach it in one go, and it will come quickly.',
+            'If a friend has to guide you, you will need someone\'s help in love too.',
+          ],
+          ending: 'Eyes still closed, your foot finds the second stone.',
+        },
+      },
+    ],
     spawn: { x: 0, z: 92, rotY: 0 },
     bounds: { x0: -46, x1: 26, z0: -22, z1: 96 },
     walkable: (x, z) => !(x < -27 && z < 40 && !inStage(x, z) && !inOtowaPath(x, z)) && !(x > -27.5 && x < -11 && Math.abs(z) < 12.2),

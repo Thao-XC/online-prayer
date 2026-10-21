@@ -8,12 +8,23 @@ import { createKitMaterials } from './kit/materials';
 import { Architecture } from './kit/architecture';
 import { Nature } from './kit/nature';
 import { LAYOUTS } from './layouts';
-import type { GroundFn, LayoutCtx, LayoutResult, ParticleKind } from './layouts/types';
+import type { GroundFn, LayoutCtx, LayoutResult, ParticleKind, SecretDef, Etiquette } from './layouts/types';
+import type { EncounterDef, EncounterEvent, EncounterRuntime, StoryCard, EncounterApi } from './encounters/types';
 import type { ShrineSpot } from '../types/shrine';
 
 export interface SceneCallbacks {
   onNearSpot?: (spotId: string | null, spotName: string | null, spotType: string | null) => void;
+  /** encounter start / captions / end (with the legend card) */
+  onEncounter?: (e: EncounterEvent) => void;
+  /** luck change with the custom behind it; `key` identifies the rule */
+  onLuck?: (delta: number, reason: string, key: string) => void;
+  /** a secret was found */
+  onSecret?: (id: string, card: StoryCard, luck: number) => void;
+  /** short line of on-screen text (hints) */
+  onCaption?: (text: string, seconds?: number) => void;
 }
+
+const POCKET_Y = -600;
 
 export class ShrineScene {
   private container: HTMLElement;
@@ -52,6 +63,35 @@ export class ShrineScene {
   private waterBaseY = 0.4;
   private nature: Nature | null = null;
   private sunOffset = new THREE.Vector3(30, 45, 25);
+
+  // Secret worlds, secrets and manners
+  private kitForEncounters: { arch: Architecture; nat: Nature; m: ReturnType<typeof createKitMaterials> } | null = null;
+  private encounterDefs: EncounterDef[] = [];
+  private enc: {
+    def: EncounterDef;
+    rt: EncounterRuntime | null;
+    root: THREE.Group | null;
+    t: number;
+    ending: boolean;
+    saved: { ground: GroundFn; walkable: ((x: number, z: number) => boolean) | null; bounds: { x0: number; x1: number; z0: number; z1: number } };
+  } | null = null;
+  private encCooldown = 0;
+  private secrets: SecretDef[] = [];
+  private secretsFound = new Set<string>();
+  private secretHinted = new Set<string>();
+  private secretLinger: Record<string, number> = {};
+  private blindwalk: { def: SecretDef; t: number } | null = null;
+  private etiquette: Etiquette = {};
+  private nightObjects: THREE.Object3D[] = [];
+  private manners = { centreT: 0, centreCount: 0, centreCool: 0, runT: 0, runCount: 0, runCool: 0, forbidCool: 0, forbidCount: 0, bowedAtGate: false, gateWarned: false, gateHinted: false, lastBow: -99, lookBackT: 0, lookBackDone: false };
+  private elapsed = 0;
+  private bowAnim = 0;
+  private shakeT = 0;
+  private shakeAmt = 0;
+  private bubbles: THREE.Points | null = null;
+  // full-screen fade quad attached to the camera
+  private fadeMesh!: THREE.Mesh;
+  private fade: { from: number; to: number; dur: number; t: number; then?: () => void } | null = null;
 
   // Player & Navigation
   public playerPosition = new THREE.Vector3(0, 1.7, 30);
@@ -94,6 +134,15 @@ export class ShrineScene {
     const aspect = container.clientWidth / container.clientHeight;
     this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, 1200);
     this.camera.position.set(0, 2.2, 34);
+    this.fadeMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(4, 4),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, fog: false })
+    );
+    this.fadeMesh.position.z = -0.3;
+    this.fadeMesh.renderOrder = 9999;
+    this.fadeMesh.frustumCulled = false;
+    this.camera.add(this.fadeMesh);
+    this.scene.add(this.camera);
 
     // 3. Renderer with Three.js studio color pipeline
     const isHeadless = navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent);
@@ -170,6 +219,7 @@ export class ShrineScene {
     const arch = new Architecture(m);
     const nat = new Nature(m);
     this.nature = nat;
+    this.kitForEncounters = { arch, nat, m };
     const self = this;
     const ctx: LayoutCtx = {
       scene: this.scene,
@@ -273,6 +323,10 @@ export class ShrineScene {
 
   /** Apply what a layout returned: spawn, bounds, spot anchors, ambience */
   private applyLayout(res: LayoutResult) {
+    this.encounterDefs = res.encounters ?? [];
+    this.secrets = res.secrets ?? [];
+    this.etiquette = res.etiquette ?? {};
+    this.nightObjects = res.nightObjects ?? [];
     this.walkable = res.walkable ?? null;
     this.bounds = res.bounds;
     this.fogMul = res.fog ?? 1;
@@ -632,6 +686,8 @@ export class ShrineScene {
    */
   public setTimeOfDay(time: TimeOfDay) {
     this.timeOfDay = time;
+    this.nightObjects.forEach((o) => (o.visible = time === 'night'));
+    if (this.enc && this.enc.rt) return; // keep the secret world's own light until you return
 
     if (time === 'day') {
       this.scene.background = new THREE.Color(0xbfe0f0);
@@ -692,6 +748,8 @@ export class ShrineScene {
    * Teleport smoothly to one of the key spots (Torii, Temizuya, Haiden, Ema, etc.)
    */
   public teleportToSpot(spotId: string) {
+    if (this.enc) this.abortEncounter();
+    this.blindwalk = null;
     const spot = this.spots.find((s) => s.id === spotId);
     if (!spot) return;
 
@@ -739,6 +797,7 @@ export class ShrineScene {
 
   private onKeyDown = (e: KeyboardEvent) => {
     this.keysPressed[e.code] = true;
+    if (e.code === 'KeyB' && !e.repeat) this.bow();
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
@@ -785,7 +844,11 @@ export class ShrineScene {
     const delta = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
+    this.elapsed += delta;
+    this.updateFade(delta);
     this.updatePlayerMovement(delta);
+    this.updateEncounter(delta);
+    this.updateManners(delta);
     this.updateParticles(delta);
     if (this.nature) {
       const t = now / 1000;
@@ -805,7 +868,7 @@ export class ShrineScene {
    * Update Player Movement & Camera Position
    */
   private updatePlayerMovement(delta: number) {
-    if (this.isCinematicMode) {
+    if (this.isCinematicMode && !this.enc) {
       // Cinematic auto-tour orbit
       this.cinematicTime += delta * 0.25;
       const o = this.orbit;
@@ -823,7 +886,10 @@ export class ShrineScene {
     const prevZ = this.playerPosition.z;
 
     // Direction vectors
-    const moveSpeed = (this.keysPressed['ShiftLeft'] || this.keysPressed['ShiftRight'] ? 9.0 : 4.5) * delta;
+    const running = !!(this.keysPressed['ShiftLeft'] || this.keysPressed['ShiftRight']);
+    const frozen = !!this.fade || (this.enc !== null && (this.enc.ending || !this.enc.rt));
+    const swim = this.enc?.rt?.underwater ? 0.65 : 1;
+    const moveSpeed = frozen ? 0 : (running ? 9.0 : 4.5) * swim * delta;
 
     this._forward.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.playerRotationY);
     this._right.set(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.playerRotationY);
@@ -856,8 +922,34 @@ export class ShrineScene {
     }
 
     // Play footstep sound periodically
-    if (moved && Math.random() < 0.08) {
+    if (moved && Math.random() < 0.08 && !this.enc?.rt?.underwater) {
       soundService.playFootstep();
+    }
+    this.manners.runT = moved && running ? this.manners.runT + delta : 0;
+
+    // Stepping somewhere special: a secret world, or somewhere you shouldn't go
+    if (moved && !this.enc) {
+      const px = this.playerPosition.x, pz = this.playerPosition.z;
+      const hit = this.encCooldown <= 0 ? this.encounterDefs.find((e) => e.zone(px, pz)) : undefined;
+      if (hit) {
+        this.playerPosition.x = prevX;
+        this.playerPosition.z = prevZ;
+        this.startEncounter(hit);
+      } else {
+        const bad = this.etiquette.forbidden?.find((f) => f.test(px, pz));
+        if (bad) {
+          this.playerPosition.x = prevX;
+          this.playerPosition.z = prevZ;
+          if (this.manners.forbidCool <= 0) {
+            this.manners.forbidCool = 6;
+            this.callbacks.onCaption?.(bad.reason, 4);
+            if (this.manners.forbidCount < 3) {
+              this.manners.forbidCount++;
+              this.callbacks.onLuck?.(-(bad.penalty ?? 3), bad.reason, 'forbidden');
+            }
+          }
+        }
+      }
     }
 
     // Constrain player within the site, and off water / out of ponds
@@ -879,9 +971,20 @@ export class ShrineScene {
 
     // Smooth camera update
     this.camera.position.copy(this.playerPosition);
+    if (this.enc?.rt?.underwater) this.camera.position.y += Math.sin(this.elapsed * 1.6) * 0.18;
+    if (this.shakeT > 0) {
+      this.shakeT -= delta;
+      this.camera.position.x += (Math.random() - 0.5) * this.shakeAmt;
+      this.camera.position.y += (Math.random() - 0.5) * this.shakeAmt;
+    }
+    let pitch = this.playerPitch;
+    if (this.bowAnim > 0) {
+      this.bowAnim = Math.max(0, this.bowAnim - delta);
+      pitch -= Math.sin(((1.6 - this.bowAnim) / 1.6) * Math.PI) * 0.75;
+    }
 
     // Look target
-    this._forward.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(1, 0, 0), this.playerPitch);
+    this._forward.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(1, 0, 0), pitch);
     this._forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.playerRotationY);
 
     this.cameraTargetLook.copy(this.playerPosition).add(this._forward);
@@ -942,7 +1045,7 @@ export class ShrineScene {
    * Dynamic Day / Sunset / Night Lighting Cycle
    */
   private updateLightingCycle(delta: number) {
-    if (!this.isAutoCycleTime) return;
+    if (!this.isAutoCycleTime || this.enc) return;
     this.autoCycleTimer += delta * 0.07;
     const phase = (Math.sin(this.autoCycleTimer) + 1) / 2; // 0 to 1
 
@@ -959,6 +1062,10 @@ export class ShrineScene {
    * Check proximity to sacred interactive spots
    */
   private checkNearbySpots() {
+    if (this.enc) {
+      this.callbacks.onNearSpot?.(null, null, null);
+      return;
+    }
     let nearestSpot: { id: string; name: string; type: string } | null = null;
     let minDist = 4.8; // Interaction trigger radius
 
@@ -975,6 +1082,332 @@ export class ShrineScene {
         this.callbacks.onNearSpot(nearestSpot.id, nearestSpot.name, nearestSpot.type);
       } else {
         this.callbacks.onNearSpot(null, null, null);
+      }
+    }
+  }
+
+  /* ================================================================== */
+  /* Fades                                                               */
+  /* ================================================================== */
+  private fadeTo(color: number, to: number, dur: number, then?: () => void) {
+    const mat = this.fadeMesh.material as THREE.MeshBasicMaterial;
+    mat.color.set(color);
+    this.fade = { from: mat.opacity, to, dur: Math.max(0.01, dur), t: 0, then };
+  }
+  private updateFade(dt: number) {
+    if (!this.fade) return;
+    const f = this.fade;
+    f.t += dt;
+    const k = Math.min(1, f.t / f.dur);
+    (this.fadeMesh.material as THREE.MeshBasicMaterial).opacity = f.from + (f.to - f.from) * k;
+    if (k >= 1) {
+      this.fade = null;
+      f.then?.();
+    }
+  }
+
+  /* ================================================================== */
+  /* Secret worlds                                                       */
+  /* ================================================================== */
+  private startEncounter(def: EncounterDef) {
+    if (!this.kitForEncounters) return;
+    this.isCinematicMode = false;
+    this.blindwalk = null;
+    this.enc = {
+      def,
+      rt: null,
+      root: null,
+      t: 0,
+      ending: false,
+      saved: { ground: this.ground, walkable: this.walkable, bounds: this.bounds },
+    };
+    this.callbacks.onEncounter?.({ type: 'start', id: def.id, title: def.title });
+    this.fadeTo(def.diveColor, 1, 0.7, () => {
+      if (!this.enc) return;
+      const root = new THREE.Group();
+      root.position.y = POCKET_Y;
+      this.scene.add(root);
+      const rt = def.build({ root, builder: this.builder, ...this.kitForEncounters! });
+      root.traverse((c) => {
+        const mesh = c as THREE.Mesh;
+        if (mesh.isMesh) mesh.receiveShadow = true;
+      });
+      this.enc.rt = rt;
+      this.enc.root = root;
+      this.ground = (x, z) => POCKET_Y + rt.ground(x, z);
+      this.walkable = rt.walkable ?? null;
+      this.bounds = rt.bounds;
+      // the secret world's own light and air
+      this.scene.background = new THREE.Color(rt.env.bg);
+      const fog = this.scene.fog as THREE.FogExp2;
+      fog.color.set(rt.env.fog);
+      fog.density = rt.env.density;
+      this.sunLight.intensity = rt.env.sun;
+      this.sunLight.color.set(rt.env.sunColor ?? 0xffffff);
+      this.hemiLight.intensity = rt.env.hemi;
+      this.hemiLight.color.set(rt.env.fog);
+      this.hemiLight.groundColor.set(rt.env.bg);
+      this.ambientFill.intensity = rt.env.ambient;
+      if (this.petalParticles) this.petalParticles.visible = false;
+      if (rt.underwater) this.createBubbles();
+      this.playerPosition.set(rt.enter.x, POCKET_Y + rt.ground(rt.enter.x, rt.enter.z) + 1.7, rt.enter.z);
+      this.playerRotationY = rt.enter.rotY;
+      this.playerPitch = 0;
+      this.fadeTo(def.diveColor, 0, 1.0);
+    });
+  }
+
+  private encounterApi(): EncounterApi {
+    return {
+      caption: (text, seconds) => this.callbacks.onEncounter?.({ type: 'caption', id: this.enc?.def.id ?? '', text, seconds }),
+      flash: (color, peak = 0.85, seconds = 0.5) => {
+        if (this.enc?.ending) return;
+        this.fadeTo(color, peak, seconds * 0.3, () => {
+          if (!this.enc?.ending) this.fadeTo(color, 0, seconds * 0.7);
+        });
+      },
+      shake: (amount, seconds = 0.6) => {
+        this.shakeAmt = amount;
+        this.shakeT = seconds;
+      },
+      setEnv: (env) => {
+        if (!this.enc?.rt) return;
+        const e = { ...this.enc.rt.env, ...env };
+        this.enc.rt.env = e;
+        this.scene.background = new THREE.Color(e.bg);
+        const fog = this.scene.fog as THREE.FogExp2;
+        fog.color.set(e.fog);
+        fog.density = e.density;
+        this.sunLight.intensity = e.sun;
+        this.sunLight.color.set(e.sunColor ?? 0xffffff);
+        this.hemiLight.intensity = e.hemi;
+        this.ambientFill.intensity = e.ambient;
+      },
+      end: (color, seconds = 1.4) => {
+        if (!this.enc || this.enc.ending) return;
+        this.enc.ending = true;
+        this.fadeTo(color, 1, seconds, () => this.finishEncounter(color));
+      },
+    };
+  }
+
+  private updateEncounter(dt: number) {
+    this.encCooldown = Math.max(0, this.encCooldown - dt);
+    if (!this.enc || !this.enc.rt || this.enc.ending) return;
+    this.enc.t += dt;
+    this.enc.rt.update(
+      this.enc.t,
+      dt,
+      { x: this.playerPosition.x, y: this.playerPosition.y - POCKET_Y, z: this.playerPosition.z, rotY: this.playerRotationY },
+      this.encounterApi()
+    );
+    if (this.bubbles) {
+      const pos = this.bubbles.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const a = pos.array as Float32Array;
+      for (let i = 0; i < a.length; i += 3) {
+        a[i + 1] += dt * (0.8 + (i % 7) * 0.12);
+        a[i] += Math.sin(this.elapsed * 2 + i) * dt * 0.1;
+        if (a[i + 1] > this.playerPosition.y + 6) {
+          a[i] = this.playerPosition.x + (Math.random() - 0.5) * 16;
+          a[i + 1] = this.playerPosition.y - 2;
+          a[i + 2] = this.playerPosition.z + (Math.random() - 0.5) * 16;
+        }
+      }
+      pos.needsUpdate = true;
+    }
+  }
+
+  private createBubbles() {
+    const n = 160;
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = this.playerPosition.x + (Math.random() - 0.5) * 16;
+      pos[i * 3 + 1] = this.playerPosition.y + (Math.random() - 0.5) * 8;
+      pos[i * 3 + 2] = this.playerPosition.z + (Math.random() - 0.5) * 16;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.bubbles = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xdff6ff, size: 0.12, transparent: true, opacity: 0.7 }));
+    this.scene.add(this.bubbles);
+  }
+
+  /** leave the secret world and put everything back */
+  private restoreFromEncounter() {
+    if (!this.enc) return;
+    const { saved, root } = this.enc;
+    if (root) {
+      this.scene.remove(root);
+      root.traverse((c) => {
+        const mesh = c as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.geometry?.dispose();
+        }
+      });
+    }
+    if (this.bubbles) {
+      this.scene.remove(this.bubbles);
+      this.bubbles.geometry.dispose();
+      this.bubbles = null;
+    }
+    this.ground = saved.ground;
+    this.walkable = saved.walkable;
+    this.bounds = saved.bounds;
+    if (this.petalParticles) this.petalParticles.visible = true;
+    this.enc = null;
+    this.setTimeOfDay(this.timeOfDay);
+  }
+
+  private finishEncounter(color: number) {
+    if (!this.enc) return;
+    const def = this.enc.def;
+    this.restoreFromEncounter();
+    this.playerPosition.set(def.exit.x, 1.7 + this.ground(def.exit.x, def.exit.z), def.exit.z);
+    this.playerRotationY = def.exit.rotY;
+    this.playerPitch = 0;
+    this.encCooldown = 4;
+    this.fadeTo(color, 0, 1.2, () => this.callbacks.onEncounter?.({ type: 'end', id: def.id, card: def.card }));
+  }
+
+  /** used when teleporting away mid-encounter */
+  private abortEncounter() {
+    this.fade = null;
+    (this.fadeMesh.material as THREE.MeshBasicMaterial).opacity = 0;
+    this.restoreFromEncounter();
+    this.encCooldown = 2;
+  }
+
+  /* ================================================================== */
+  /* Bowing, secrets and manners                                         */
+  /* ================================================================== */
+  /** Bow (B key / Bow button). Greets the kami at the gate, and some secrets answer a bow. */
+  public bow() {
+    if (this.bowAnim > 0 || this.enc) return;
+    this.bowAnim = 1.6;
+    this.manners.lastBow = this.elapsed;
+    const px = this.playerPosition.x, pz = this.playerPosition.z;
+    const s = this.secrets.find((d) => d.trigger === 'bow' && Math.hypot(px - d.at[0], pz - d.at[1]) < (d.r ?? 3));
+    if (s) {
+      setTimeout(() => this.foundSecret(s), 900);
+      return;
+    }
+    const gate = this.spots.find((sp) => sp.type === 'torii');
+    if (gate && Math.hypot(px - gate.position[0], pz - gate.position[2]) < 7 && !this.manners.bowedAtGate) {
+      this.manners.bowedAtGate = true;
+      this.callbacks.onLuck?.(1, 'Bowed before entering the sacred grounds', 'bow-gate');
+    }
+  }
+
+  private foundSecret(d: SecretDef) {
+    if (this.secretsFound.has(d.id)) return;
+    this.secretsFound.add(d.id);
+    d.onFound?.();
+    soundService.playBellChime();
+    this.callbacks.onSecret?.(d.id, d.card, d.luck);
+  }
+
+  private updateManners(dt: number) {
+    const M = this.manners;
+    M.centreCool = Math.max(0, M.centreCool - dt);
+    M.runCool = Math.max(0, M.runCool - dt);
+    M.forbidCool = Math.max(0, M.forbidCool - dt);
+    if (this.enc || this.isCinematicMode) return;
+    const px = this.playerPosition.x, pz = this.playerPosition.z;
+
+    // walking straight down the middle of a shrine approach (seichū is the path of the kami)
+    const lines = this.etiquette.centerLines ?? [];
+    const onCentre = lines.some(([x0, z0, x1, z1]) => {
+      const dx = x1 - x0, dz = z1 - z0;
+      const t = Math.max(0, Math.min(1, ((px - x0) * dx + (pz - z0) * dz) / (dx * dx + dz * dz)));
+      return t > 0 && t < 1 && Math.hypot(px - (x0 + dx * t), pz - (z0 + dz * t)) < 0.9;
+    });
+    const moving = this.manners.runT > 0 || Object.values(this.keysPressed).some(Boolean) || this.joystickVector.x !== 0 || this.joystickVector.y !== 0;
+    M.centreT = onCentre && moving ? M.centreT + dt : Math.max(0, M.centreT - dt * 0.5);
+    if (M.centreT > 3 && M.centreCool <= 0) {
+      M.centreT = 0;
+      M.centreCool = 25;
+      if (M.centreCount < 3) {
+        M.centreCount++;
+        this.callbacks.onLuck?.(-1, 'The centre of the sandō is the path of the kami — walk to one side', 'centre');
+      }
+    }
+
+    // looking back where you shouldn't
+    for (const rule of this.etiquette.noLookBack ?? []) {
+      if (M.lookBackDone || !rule.test(px, pz)) continue;
+      const fx = -Math.sin(this.playerRotationY), fz = -Math.cos(this.playerRotationY);
+      const l = Math.hypot(rule.facing[0], rule.facing[1]);
+      if ((fx * rule.facing[0] + fz * rule.facing[1]) / l > 0.6) {
+        M.lookBackT += dt;
+        if (M.lookBackT > 0.8) {
+          M.lookBackDone = true;
+          this.callbacks.onLuck?.(-1, rule.reason, 'lookback');
+        }
+      } else M.lookBackT = 0;
+    }
+
+    // running near the halls
+    const hall = this.spots.find((sp) => sp.type === 'haiden');
+    if (hall && M.runT > 1.5 && Math.hypot(px - hall.position[0], pz - hall.position[2]) < 30 && M.runCool <= 0) {
+      M.runCool = 20;
+      if (M.runCount < 2) {
+        M.runCount++;
+        this.callbacks.onLuck?.(-1, 'Please walk calmly near the halls', 'run');
+      }
+    }
+
+    // passing the gate without a bow
+    const gate = this.spots.find((sp) => sp.type === 'torii');
+    if (gate && !M.bowedAtGate && !M.gateWarned) {
+      const gx = gate.position[0], gz = gate.position[2];
+      const d = Math.hypot(px - gx, pz - gz);
+      if (d < 4 && !M.gateHinted) {
+        M.gateHinted = true;
+        this.callbacks.onCaption?.('A bow before the gate greets the kami — press B or tap Bow', 5);
+      }
+      const lx = gate.cameraTarget[0], lz = gate.cameraTarget[2];
+      const span = Math.hypot(lx - gx, lz - gz);
+      if (M.gateHinted && d > 9 && Math.hypot(px - lx, pz - lz) < span) {
+        M.gateWarned = true;
+        this.callbacks.onLuck?.(-1, 'Walked through the gate without a bow', 'gate');
+      }
+    }
+
+    // secrets
+    for (const d of this.secrets) {
+      if (this.secretsFound.has(d.id)) continue;
+      const dist = Math.hypot(px - d.at[0], pz - d.at[1]);
+      const r = d.r ?? 3;
+      if (d.hint && dist < r * 2.2 && !this.secretHinted.has(d.id)) {
+        this.secretHinted.add(d.id);
+        this.callbacks.onCaption?.(d.hint, 5);
+      }
+      if (dist > r) {
+        this.secretLinger[d.id] = 0;
+        continue;
+      }
+      if (d.trigger === 'enter') this.foundSecret(d);
+      else if (d.trigger === 'night' && this.timeOfDay === 'night') this.foundSecret(d);
+      else if (d.trigger === 'linger') {
+        this.secretLinger[d.id] = (this.secretLinger[d.id] ?? 0) + dt;
+        if (this.secretLinger[d.id] > (d.seconds ?? 4)) this.foundSecret(d);
+      } else if (d.trigger === 'blindwalk' && !this.blindwalk) {
+        this.blindwalk = { def: d, t: 0 };
+        this.fadeTo(0x000000, 0.94, 0.8);
+        this.callbacks.onCaption?.('Eyes closed… walk to the other stone', 6);
+      }
+    }
+    if (this.blindwalk) {
+      const b = this.blindwalk;
+      b.t += dt;
+      const to = b.def.to!;
+      if (Math.hypot(px - to[0], pz - to[1]) < 1.6) {
+        this.blindwalk = null;
+        this.fadeTo(0x000000, 0, 0.8);
+        this.foundSecret(b.def);
+      } else if (b.t > 25 || Math.hypot(px - b.def.at[0], pz - b.def.at[1]) > Math.hypot(to[0] - b.def.at[0], to[1] - b.def.at[1]) + 6) {
+        this.blindwalk = null;
+        this.fadeTo(0x000000, 0, 0.6);
+        this.callbacks.onCaption?.('You open your eyes — not quite. Try again from the first stone.', 5);
       }
     }
   }

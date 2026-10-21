@@ -9,14 +9,20 @@ interface SaisenWorshipModalProps {
   shrine: ShrineData;
   onClose: () => void;
   onWorshipComplete: () => void;
+  /** called if the visitor does something improper (e.g. clapping at a temple) */
+  onDisrespect?: (reason: string) => void;
 }
 
 export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
   shrine,
   onClose,
   onWorshipComplete,
+  onDisrespect,
 }) => {
   const isTemple = shrine.type === 'temple';
+  // Izumo Taisha (and a few others) pray with four claps instead of two
+  const clapsNeeded = shrine.id === 'izumo-taisha' ? 4 : 2;
+  const [templeClapNote, setTempleClapNote] = useState(false);
   const [step, setStep] = useState<'coin' | 'bell' | 'bow_clap' | 'prayer' | 'done'>('coin');
   const [coinType, setCoinType] = useState<'5yen' | '100yen'>('5yen');
   const [prayerText, setPrayerText] = useState('');
@@ -56,7 +62,7 @@ export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
 
   const isRitualFinished = isTemple
     ? bowCount >= 1
-    : bowCount >= 2 && clapCount >= 2;
+    : bowCount >= 2 && clapCount >= clapsNeeded;
 
   const handleProceedToPrayer = () => {
     setStep('prayer');
@@ -88,7 +94,7 @@ export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
             {shrine.name}
           </h2>
           <p className="text-xs text-[#6d5b49] font-kanji mt-0.5">
-            {isTemple ? '合掌・礼拝（がっしょう・らいはい）' : '二礼・二拍手・一礼（にれい・にはくしゅ・いちれい）'}
+            {isTemple ? '合掌・礼拝（がっしょう・らいはい）' : clapsNeeded === 4 ? '二礼・四拍手・一礼（にれい・よんはくしゅ・いちれい）' : '二礼・二拍手・一礼（にれい・にはくしゅ・いちれい）'}
           </p>
         </div>
 
@@ -176,10 +182,10 @@ export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
           <div className="space-y-6">
             <div className="p-5 bg-[#fffcf6] border border-[#e3d6c0] rounded-xl space-y-3 text-center">
               <h3 className="text-base font-cinzel text-[#7c2d12]">
-                3. {isTemple ? 'Solemn Bow & Gasshō (合掌)' : 'Two Bows, Two Claps, One Bow'}
+                3. {isTemple ? 'Solemn Bow & Gasshō (合掌)' : clapsNeeded === 4 ? 'Two Bows, Four Claps, One Bow' : 'Two Bows, Two Claps, One Bow'}
               </h3>
               <p className="text-xs text-[#b45309] font-kanji">
-                {isTemple ? '一礼・合掌（一礼して静かに合掌）' : '二礼 二拍手 一礼'}
+                {isTemple ? '一礼・合掌（一礼して静かに合掌）' : clapsNeeded === 4 ? '二礼 四拍手 一礼 ・ 出雲大社の作法' : '二礼 二拍手 一礼'}
               </p>
               <p className="text-sm text-[#4a3c2e] leading-relaxed">
                 {isTemple
@@ -195,8 +201,8 @@ export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
                     <div className="text-lg font-bold text-[#9a3412]">{Math.min(bowCount, 2)} / 2</div>
                   </div>
                   <div className="bg-[#f6efe2] p-3 rounded-lg border border-[#e3d6c0]">
-                    <div className="text-xs text-[#6d5b49]">Claps (二拍手)</div>
-                    <div className="text-lg font-bold text-[#9a3412]">{Math.min(clapCount, 2)} / 2</div>
+                    <div className="text-xs text-[#6d5b49]">Claps ({clapsNeeded === 4 ? '四拍手' : '二拍手'})</div>
+                    <div className="text-lg font-bold text-[#9a3412]">{Math.min(clapCount, clapsNeeded)} / {clapsNeeded}</div>
                   </div>
                 </div>
               ) : (
@@ -216,7 +222,19 @@ export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
               >
                 Perform Deep Bow 🙇
               </button>
-              {!isTemple && (
+              {isTemple ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playClap(1);
+                    if (!templeClapNote) onDisrespect?.('Clapped at a Buddhist temple. Here you join your palms quietly instead.');
+                    setTempleClapNote(true);
+                  }}
+                  className="py-3 px-4 rounded-xl border border-[#d8c8ae] bg-[#fffcf6] hover:bg-[#f6efe2] text-[#4a3c2e] font-medium transition-colors cursor-pointer"
+                >
+                  Clap 👏
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={handleClap}
@@ -226,6 +244,11 @@ export const SaisenWorshipModal: React.FC<SaisenWorshipModalProps> = ({
                 </button>
               )}
             </div>
+            {templeClapNote && (
+              <p className="text-[13px] text-[#9a3412] bg-[#fdecea] border border-[#e8b4a8] rounded-xl px-3 py-2">
+                At Buddhist temples you don't clap. Bow, then press your palms together quietly (gasshō).
+              </p>
+            )}
 
             {isRitualFinished && (
               <button
