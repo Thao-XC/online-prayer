@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Sheet } from './ui/Sheet';
 import { soundService } from '../services/soundService';
 import { ShrineData, OmikujiFortune, OmikujiRank } from '../types/shrine';
 import { SAMPLE_FORTUNES } from '../data/shrinesData';
@@ -123,29 +124,17 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-stone-900 border border-amber-900/40 rounded-2xl shadow-2xl p-6 text-stone-100 overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Vermilion Top Bar */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
-
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-100 rounded-full hover:bg-stone-800 transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <Sheet onClose={onClose} size="md" label="Omikuji" className="p-6 flex flex-col">
 
         {/* Title */}
         <div className="text-center mb-4 shrink-0">
-          <span className="text-xs uppercase tracking-widest text-amber-500/90 font-medium">
+          <span className="text-xs uppercase tracking-widest text-[#b45309] font-medium">
             Sacred Divination
           </span>
-          <h2 className="text-xl sm:text-2xl font-cinzel font-semibold text-amber-100 mt-0.5">
+          <h2 className="text-xl sm:text-2xl font-cinzel font-semibold text-[#2c241c] mt-0.5">
             Draw Sacred Omikuji (おみくじ)
           </h2>
-          <p className="text-xs text-stone-400 font-kanji">
+          <p className="text-xs text-[#6d5b49] font-kanji">
             {shrine.name}・神託神意
           </p>
         </div>
@@ -154,48 +143,50 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
         {(phase === 'shake' || phase === 'shaking') && (
           <div className="py-4 text-center space-y-4 flex-1 flex flex-col justify-center items-center overflow-y-auto">
             {/* Draw Mode Toggle */}
-            <div className="flex items-center gap-1.5 p-1 bg-stone-950/80 rounded-xl border border-stone-800 text-xs">
+            <div className="flex items-center gap-1.5 p-1 bg-[#fffcf6] rounded-xl border border-[#e3d6c0] text-xs">
               <button
                 type="button"
                 onClick={() => setIsAiMode(false)}
                 className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  !isAiMode ? 'bg-amber-600 text-stone-950 font-bold' : 'text-stone-400 hover:text-stone-200'
+                  !isAiMode ? 'bg-[#b91c1c] text-white font-bold' : 'text-[#6d5b49] hover:text-[#2c241c]'
                 }`}
               >
-                Traditional Draw (伝統)
+                <span className="sm:hidden">Traditional</span>
+                <span className="hidden sm:inline">Traditional Draw (伝統)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsAiMode(true)}
                 className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 ${
-                  isAiMode ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white font-bold' : 'text-stone-400 hover:text-stone-200'
+                  isAiMode ? 'bg-gradient-to-r from-[#b91c1c] to-[#c2410c] text-white font-bold' : 'text-[#6d5b49] hover:text-[#2c241c]'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>AI Personalized Oracle (神託)</span>
+                <Sparkles className="w-3.5 h-3.5 text-[#9a3412]" />
+                <span className="sm:hidden">AI Oracle</span>
+                <span className="hidden sm:inline">AI Personalized Oracle (神託)</span>
               </button>
             </div>
 
             {/* AI Custom Question Form if in AI Mode */}
             {isAiMode && (
-              <div className="w-full max-w-sm p-3 bg-stone-950/90 border border-stone-800 rounded-xl space-y-2 text-left">
+              <div className="w-full max-w-sm p-3 bg-[#fffcf6] border border-[#e3d6c0] rounded-xl space-y-2 text-left">
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={userName}
                     onChange={(e) => setUserName(e.target.value)}
                     placeholder="Your Name (Optional)"
-                    className="w-1/3 px-2.5 py-1.5 bg-stone-900 border border-stone-700 rounded-lg text-xs text-stone-200 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+                    className="w-1/3 px-2.5 py-1.5 bg-[#f6efe2] border border-[#d8c8ae] rounded-lg text-xs text-[#2c241c] placeholder-[#a8967f] focus:outline-none focus:border-[#b45309]"
                   />
                   <input
                     type="text"
                     value={userQuestion}
                     onChange={(e) => setUserQuestion(e.target.value)}
                     placeholder="Your Question, Hope, or Dilemma..."
-                    className="flex-1 px-2.5 py-1.5 bg-stone-900 border border-stone-700 rounded-lg text-xs text-stone-200 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+                    className="flex-1 px-2.5 py-1.5 bg-[#f6efe2] border border-[#d8c8ae] rounded-lg text-xs text-[#2c241c] placeholder-[#a8967f] focus:outline-none focus:border-[#b45309]"
                   />
                 </div>
-                <p className="text-[10px] text-stone-400">
+                <p className="text-[10px] text-[#6d5b49]">
                   The AI Oracle will compose a custom Waka poem and tailored divine guidance for you.
                 </p>
               </div>
@@ -203,18 +194,18 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
 
             {/* Wooden Cylindrical Canister Visual */}
             <div
-              className={`relative w-24 h-40 bg-gradient-to-b from-amber-800 via-amber-900 to-stone-950 rounded-2xl border-2 border-amber-600/50 shadow-2xl flex flex-col items-center justify-between p-3 transition-transform ${
+              className={`relative w-24 h-40 bg-gradient-to-b from-[#a83a1a] via-[#7c2410] to-[#4a160a] rounded-2xl border-2 border-[#c9a26a] shadow-2xl flex flex-col items-center justify-between p-3 transition-transform ${
                 phase === 'shaking' ? 'animate-bounce rotate-6' : ''
               }`}
             >
-              <div className="w-14 h-2.5 bg-stone-950 rounded-full border border-amber-500/40" />
-              <div className="font-kanji font-bold text-amber-200 text-base writing-vertical tracking-widest">
+              <div className="w-14 h-2.5 bg-[#2c1208] rounded-full border border-[#c9a26a]" />
+              <div className="font-kanji font-bold text-[#fde68a] text-base writing-vertical [writing-mode:vertical-rl] tracking-widest">
                 御神籤
               </div>
-              <div className="w-7 h-2 bg-stone-950 rounded-full" />
+              <div className="w-7 h-2 bg-[#fffcf6] rounded-full" />
             </div>
 
-            <p className="text-xs text-stone-300 max-w-xs">
+            <p className="text-xs text-[#4a3c2e] max-w-xs">
               {isAiMode
                 ? 'Enter your intention above, then shake the canister to receive divine personal counsel.'
                 : 'Focus your heart upon your question, then shake the wooden cylinder to draw your fortune stick.'}
@@ -223,9 +214,9 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
             <button
               onClick={handleShakeCanister}
               disabled={phase === 'shaking' || isAiLoading}
-              className="w-full max-w-xs py-3.5 px-6 rounded-xl font-medium tracking-wide bg-gradient-to-r from-red-700 to-amber-700 hover:from-red-600 hover:to-amber-600 text-amber-100 border border-amber-600/40 transition-all shadow-lg hover:shadow-amber-900/30 cursor-pointer flex items-center justify-center gap-2"
+              className="w-full max-w-xs py-3.5 px-6 rounded-xl font-medium tracking-wide bg-gradient-to-r from-[#a3170f] to-[#c2410c] hover:from-[#b91c1c] hover:to-[#c2410c] text-[#fff7e6] border border-[#d6b98c] transition-all shadow-lg hover:shadow-[#b91c1c]/15 cursor-pointer flex items-center justify-center gap-2"
             >
-              <Scroll className="w-5 h-5 text-amber-300" />
+              <Scroll className="w-5 h-5 text-[#fde68a]" />
               <span>
                 {phase === 'shaking' || isAiLoading
                   ? isAiMode
@@ -243,9 +234,9 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
         {phase === 'revealed' && fortune && (
           <div className="overflow-y-auto space-y-4 pr-1 flex-1">
             {/* Traditional Paper Scroll Frame */}
-            <div className="bg-[#fcfaf2] text-stone-900 p-5 rounded-xl border border-amber-300 shadow-inner relative">
+            <div className="bg-[#fcfaf2] text-stone-900 p-5 rounded-xl border border-[#d9a85c] shadow-inner relative">
               {/* Paper Watermark stamp */}
-              <div className="absolute top-4 right-4 border-2 border-red-600/70 text-red-700 px-2.5 py-1 text-xs font-kanji font-bold rounded">
+              <div className="absolute top-4 right-4 border-2 border-[#d98f80] text-red-700 px-2.5 py-1 text-xs font-kanji font-bold rounded">
                 第{fortune.number}番
               </div>
 
@@ -260,7 +251,7 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
               </div>
 
               {/* Poetic Inscription */}
-              <div className="my-4 p-3 bg-amber-50/70 rounded-lg border-l-4 border-amber-600 text-stone-800 text-sm italic font-serif leading-relaxed">
+              <div className="my-4 p-3 bg-amber-50/70 rounded-lg border-l-4 border-[#b45309] text-stone-800 text-sm italic font-serif leading-relaxed">
                 "{fortune.poem}"
               </div>
 
@@ -303,31 +294,31 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
                 <button
                   type="button"
                   onClick={handleTieToFence}
-                  className="py-3 px-3 rounded-xl border border-stone-700 bg-stone-800 hover:bg-stone-750 text-stone-200 text-xs font-medium transition-colors cursor-pointer text-center"
+                  className="py-3 px-3 rounded-xl border border-[#d8c8ae] bg-[#ece2cf] hover:bg-[#e4d7bf] text-[#2c241c] text-xs font-medium transition-colors cursor-pointer text-center"
                 >
                   <div className="font-semibold">Tie to Shrine Fence</div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">結び所に結ぶ (Entrust to Kami)</div>
+                  <div className="text-[10px] text-[#6d5b49] mt-0.5">結び所に結ぶ (Entrust to Kami)</div>
                 </button>
                 <button
                   type="button"
                   onClick={handleKeepFortune}
-                  className="py-3 px-3 rounded-xl border border-amber-600/40 bg-amber-950/40 hover:bg-amber-900/40 text-amber-200 text-xs font-medium transition-colors cursor-pointer text-center"
+                  className="py-3 px-3 rounded-xl border border-[#d6b98c] bg-[#fbeedd] hover:bg-[#fbeedd] text-[#7c2d12] text-xs font-medium transition-colors cursor-pointer text-center"
                 >
                   <div className="font-semibold">Save to Collection</div>
-                  <div className="text-[10px] text-amber-400/80 mt-0.5">お守りとして保存 (Keep as Talisman)</div>
+                  <div className="text-[10px] text-[#b45309] mt-0.5">お守りとして保存 (Keep as Talisman)</div>
                 </button>
               </div>
             ) : (
-              <div className="text-center py-2 bg-stone-950/70 border border-stone-800 rounded-xl p-3">
-                <div className="text-sm font-semibold text-amber-300 flex items-center justify-center gap-1.5">
-                  <Check className="w-4 h-4 text-emerald-400" />
+              <div className="text-center py-2 bg-[#fffcf6] border border-[#e3d6c0] rounded-xl p-3">
+                <div className="text-sm font-semibold text-[#9a3412] flex items-center justify-center gap-1.5">
+                  <Check className="w-4 h-4 text-[#15803d]" />
                   {actionDone === 'tied'
                     ? 'Fortune tied onto the sacred shrine fence with prayer.'
                     : 'Fortune preserved in your personal pilgrimage collection!'}
                 </div>
                 <button
                   onClick={onClose}
-                  className="mt-3 w-full py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium"
+                  className="mt-3 w-full py-2.5 rounded-lg bg-[#ece2cf] hover:bg-[#e4d7bf] text-[#2c241c] text-xs font-medium"
                 >
                   Return to Exploration
                 </button>
@@ -335,7 +326,6 @@ export const OmikujiModal: React.FC<OmikujiModalProps> = ({
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Sheet>
   );
 };

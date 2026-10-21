@@ -569,7 +569,9 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
       {/* Main Content Area: Map / Directory + Details Sidebar */}
       <main
         className={`relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-1 overflow-hidden ${
-          isMapExpanded && viewMode === 'map' ? 'grid-rows-1' : 'grid-rows-[minmax(0,55fr)_minmax(0,45fr)]'
+          (isMapExpanded && viewMode === 'map') || viewMode === 'directory'
+            ? 'grid-rows-1'
+            : 'grid-rows-[minmax(0,55fr)_minmax(0,45fr)]'
         }`}
       >
         {/* Left Column: Interactive Detailed Japan Map OR Sanctuary Directory */}
@@ -1054,7 +1056,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           )}
 
           {/* Bottom Quick-Select Thumbnail Carousel */}
-          <div className="mt-2 pt-2 border-t border-[#ded0ba] flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none shrink-0">
+          <div className={`mt-2 pt-2 border-t border-[#ded0ba] items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] shrink-0 ${viewMode === 'directory' ? 'hidden' : 'flex'}`}>
             <span className="text-[11px] font-semibold text-[#6e5a47] shrink-0 hidden md:inline">
               Sanctuaries ({filteredShrines.length}):
             </span>
@@ -1084,8 +1086,12 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
         {/* Can be collapsed when map is expanded, or kept visible */}
         <div
           className={`${
-            isMapExpanded && viewMode === 'map' ? 'hidden' : 'lg:col-span-5 xl:col-span-4'
-          } bg-[#fbf7f0] border-t lg:border-t-0 lg:border-l border-[#ded2bd] px-4 pt-4 sm:px-5 sm:pt-5 flex flex-col justify-between overflow-y-auto min-h-0 transition-all duration-300`}
+            isMapExpanded && viewMode === 'map'
+              ? 'hidden'
+              : viewMode === 'directory'
+              ? 'hidden lg:flex lg:col-span-5 xl:col-span-4'
+              : 'flex lg:col-span-5 xl:col-span-4'
+          } bg-[#fbf7f0] border-t lg:border-t-0 lg:border-l border-[#ded2bd] px-4 pt-4 sm:px-5 sm:pt-5 flex-col justify-between overflow-y-auto min-h-0 transition-all duration-300`}
         >
           <div className="space-y-3.5">
             {/* Visual Header Banner representing shrine atmosphere */}

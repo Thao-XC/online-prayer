@@ -1,4 +1,5 @@
 import React from 'react';
+import { Sheet } from './ui/Sheet';
 import { SHRINES } from '../data/shrinesData';
 import { GoshuinEntry, ShrineData } from '../types/shrine';
 import { soundService } from '../services/soundService';
@@ -40,42 +41,47 @@ export const GoshuinBookModal: React.FC<GoshuinBookModalProps> = ({
     onAddGoshuin(newEntry);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-stone-900 border border-amber-900/40 rounded-2xl shadow-2xl p-6 text-stone-100 overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Vermilion Top Bar */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
+  const collected = SHRINES.flatMap((shrine) => {
+    const entry = goshuinList.find((g) => g.shrineId === shrine.id);
+    return entry ? [{ shrine, entry }] : [];
+  });
+  const remaining = SHRINES.filter((shrine) => !goshuinList.some((g) => g.shrineId === shrine.id));
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-100 rounded-full hover:bg-stone-800 transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5" />
-        </button>
+  return (
+    <Sheet onClose={onClose} size="lg" label="Goshuincho stamp book" className="px-5 pt-3 sm:p-6 flex flex-col">
 
         {/* Header */}
         <div className="text-center mb-5 shrink-0">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-medium mb-1">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#fdecea] border border-[#e8b4a8] text-[#b91c1c] text-xs font-medium mb-1">
             <Award className="w-3.5 h-3.5" />
             <span>Pilgrim's Sacred Stamp Album</span>
           </div>
-          <h2 className="text-2xl font-cinzel font-semibold text-amber-100">
+          <h2 className="text-2xl font-cinzel font-semibold text-[#2c241c]">
             Goshuinchō (御朱印帳)
           </h2>
-          <p className="text-xs text-stone-400 font-kanji mt-0.5">
-            Collected: {goshuinList.length} of {SHRINES.length} Sacred Sanctuaries
-          </p>
+          <div className="mt-2 mx-auto max-w-xs">
+            <div className="flex justify-between text-[11px] text-[#6d5b49] mb-1">
+              <span>Seals collected</span>
+              <span className="font-mono font-semibold text-[#b91c1c]">
+                {goshuinList.length} / {SHRINES.length}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#ece2cf] overflow-hidden">
+              <div
+                className="h-full bg-[#b91c1c] rounded-full transition-all duration-500"
+                style={{ width: `${(goshuinList.length / SHRINES.length) * 100}%` }}
+              />
+            </div>
+          </div>
 
           {/* Prompt to stamp current shrine if not yet done */}
           {!isCurrentStamped ? (
-            <div className="mt-3 p-3 bg-red-950/40 border border-red-700/40 rounded-xl flex items-center justify-between gap-3 text-left">
+            <div className="mt-3 p-3 bg-[#fdecea] border border-[#e8b4a8] rounded-xl flex items-center justify-between gap-3 text-left">
               <div>
-                <div className="text-xs font-semibold text-amber-200 font-cinzel">
+                <div className="text-xs font-semibold text-[#7c2d12] font-cinzel">
                   You are at {currentShrine.name}!
                 </div>
-                <div className="text-[11px] text-stone-300 font-sans">
+                <div className="text-[11px] text-[#4a3c2e] font-sans">
                   Receive the official vermilion seal and calligraphy stamp for this visit.
                 </div>
               </div>
@@ -88,35 +94,29 @@ export const GoshuinBookModal: React.FC<GoshuinBookModalProps> = ({
               </button>
             </div>
           ) : (
-            <div className="mt-2 text-xs text-emerald-400 flex items-center justify-center gap-1">
+            <div className="mt-2 text-xs text-[#15803d] flex items-center justify-center gap-1">
               <Check className="w-3.5 h-3.5" />
               <span>{currentShrine.name} Goshuin officially sealed in your book.</span>
             </div>
           )}
         </div>
 
-        {/* Grid of Shrine Stamps */}
-        <div className="overflow-y-auto space-y-4 pr-1 flex-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {SHRINES.map((shrine) => {
-              const entry = goshuinList.find((g) => g.shrineId === shrine.id);
-              const stamped = !!entry;
-
-              return (
-                <div
-                  key={shrine.id}
-                  className={`relative p-5 rounded-xl border transition-all ${
-                    stamped
-                      ? 'bg-[#fbf7ea] text-stone-900 border-amber-300 shadow-md'
-                      : 'bg-stone-950/60 text-stone-500 border-stone-800'
-                  }`}
-                >
-                  {stamped ? (
+        {/* Collected seals */}
+        <div className="flex-1 space-y-5">
+          {collected.length > 0 && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8a7762] mb-2">Your seals</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {collected.map(({ shrine, entry }) => (
+                  <div
+                    key={shrine.id}
+                    className="relative p-4 rounded-xl border bg-[#fffcf6] text-stone-900 border-[#d9a85c] shadow-sm"
+                  >
                     <div>
                       {/* Stamp Header */}
                       <div className="flex justify-between items-start border-b border-stone-300 pb-2 mb-3">
                         <div>
-                          <span className="text-[10px] text-stone-500 uppercase tracking-widest font-mono">
+                          <span className="text-[10px] text-[#8a7762] uppercase tracking-widest font-mono">
                             {shrine.region} • {shrine.prefecture}
                           </span>
                           <h4 className="text-base font-bold font-kanji text-stone-900">
@@ -159,35 +159,39 @@ export const GoshuinBookModal: React.FC<GoshuinBookModalProps> = ({
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    /* Locked / Unvisited placeholder */
-                    <div className="h-44 flex flex-col items-center justify-center text-center p-3">
-                      <div className="w-14 h-14 rounded-full border border-dashed border-stone-700 flex items-center justify-center mb-2 text-stone-600">
-                        <Stamp className="w-6 h-6" />
-                      </div>
-                      <h4 className="text-sm font-kanji text-stone-400">
-                        {shrine.kanjiName} ({shrine.name})
-                      </h4>
-                      <p className="text-[11px] text-stone-600 mt-1">
-                        Visit this sacred site and perform worship to earn the seal.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-        <div className="pt-3 border-t border-stone-800 text-center shrink-0">
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto py-2.5 px-8 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium cursor-pointer"
-          >
-            Close Goshuinchō
-          </button>
+          {/* Not yet visited: compact stamp circles */}
+          {remaining.length > 0 && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8a7762] mb-2">
+                Still to visit
+              </h3>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {remaining.map((shrine) => (
+                  <div
+                    key={shrine.id}
+                    className={`flex flex-col items-center text-center gap-1.5 p-2 rounded-xl ${
+                      shrine.id === currentShrine.id ? 'bg-[#fdecea] ring-1 ring-[#e8b4a8]' : ''
+                    }`}
+                    title={`${shrine.name} — visit and worship to earn this seal`}
+                  >
+                    <div className="w-12 h-12 rounded-full border border-dashed border-[#cdb999] flex items-center justify-center text-[#c4ae8c]">
+                      <span className="font-kanji text-sm font-bold">{shrine.kanjiName.charAt(0)}</span>
+                    </div>
+                    <span className="text-[11px] leading-tight font-kanji text-[#6d5b49] line-clamp-2">
+                      {shrine.kanjiName.split('（')[0]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 };

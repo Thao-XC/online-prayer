@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Sheet } from './ui/Sheet';
 import { ShrineData } from '../types/shrine';
 import { soundService } from '../services/soundService';
 import { Sparkles, Send, X, Bot, RefreshCw } from 'lucide-react';
@@ -126,35 +127,23 @@ export const MikoDialogueModal: React.FC<MikoDialogueModalProps> = ({
       ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-stone-900 border border-amber-900/40 rounded-2xl shadow-2xl p-5 sm:p-6 text-stone-100 overflow-hidden flex flex-col h-[600px] max-h-[90vh]">
-        {/* Vermilion Top Bar */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
-
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-100 rounded-full hover:bg-stone-800 transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <Sheet onClose={onClose} size="md" label="Guide conversation" className="p-5 sm:p-6 flex flex-col" cardClassName="h-[88dvh] sm:h-[620px]">
 
         {/* Guide Avatar Header */}
-        <div className="flex items-center gap-3 pb-3 border-b border-stone-800 shrink-0">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-900/80 to-amber-900/80 border border-amber-500/40 flex items-center justify-center text-2xl shadow-inner">
+        <div className="flex items-center gap-3 pb-3 pr-10 border-b border-[#e3d6c0] shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f6d9cf] to-[#f1dcc0] border border-[#c9a26a] flex items-center justify-center text-2xl shadow-inner">
             {avatarEmoji}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-cinzel font-bold text-amber-200">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <h3 className="text-base font-cinzel font-bold text-[#7c2d12]">
                 {guideName}
               </h3>
-              <span className="text-[10px] bg-red-950/70 border border-red-500/40 text-red-300 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
+              <span className="text-[10px] bg-[#fdecea] border border-[#e8b4a8] text-[#b91c1c] px-2 py-0.5 rounded-full font-mono flex items-center gap-1 whitespace-nowrap">
                 <Bot className="w-3 h-3" /> AI Spiritual Guide
               </span>
             </div>
-            <p className="text-xs text-stone-400">
+            <p className="text-xs text-[#6d5b49] truncate">
               {guideRoleTitle} • {shrine.name}
             </p>
           </div>
@@ -173,7 +162,7 @@ export const MikoDialogueModal: React.FC<MikoDialogueModalProps> = ({
               }`}
             >
               <div className="flex items-center gap-1.5 mb-1 px-1">
-                <span className="text-[10px] text-stone-400 font-medium">
+                <span className="text-[10px] text-[#6d5b49] font-medium">
                   {msg.sender === 'user' ? 'You (Pilgrim)' : guideName.split('(')[0]}
                 </span>
                 <span className="text-[9px] text-stone-600">{msg.time}</span>
@@ -181,8 +170,8 @@ export const MikoDialogueModal: React.FC<MikoDialogueModalProps> = ({
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed ${
                   msg.sender === 'user'
-                    ? 'bg-amber-600 text-stone-950 font-medium rounded-tr-xs'
-                    : 'bg-stone-950 border border-stone-800 text-stone-200 rounded-tl-xs shadow-md'
+                    ? 'bg-[#b91c1c] text-white font-medium rounded-tr-xs'
+                    : 'bg-[#fffcf6] border border-[#e3d6c0] text-[#2c241c] rounded-tl-xs shadow-md'
                 }`}
               >
                 {msg.text}
@@ -192,8 +181,8 @@ export const MikoDialogueModal: React.FC<MikoDialogueModalProps> = ({
 
           {/* Typing Indicator */}
           {isLoading && (
-            <div className="flex items-center gap-2 text-stone-400 text-xs py-2 px-1">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+            <div className="flex items-center gap-2 text-[#6d5b49] text-xs py-2 px-1">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#b45309]" />
               <span className="font-serif italic">
                 {guideName.split('(')[0]} is contemplating your words...
               </span>
@@ -202,15 +191,15 @@ export const MikoDialogueModal: React.FC<MikoDialogueModalProps> = ({
         </div>
 
         {/* Suggested Quick Questions Strip */}
-        <div className="py-2 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0 border-t border-stone-800/60">
+        <div className="py-2 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0 border-t border-[#e3d6c0]">
           {SUGGESTED_QUESTIONS.map((q, idx) => (
             <button
               key={idx}
               onClick={() => handleSendMessage(q)}
               disabled={isLoading}
-              className="text-[11px] whitespace-nowrap px-2.5 py-1 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-amber-200 transition-colors shrink-0 cursor-pointer flex items-center gap-1"
+              className="text-[11px] whitespace-nowrap px-2.5 py-1 rounded-lg bg-[#fffcf6] hover:bg-[#ece2cf] border border-[#e3d6c0] text-[#4a3c2e] hover:text-[#7c2d12] transition-colors shrink-0 cursor-pointer flex items-center gap-1"
             >
-              <Sparkles className="w-3 h-3 text-amber-500" />
+              <Sparkles className="w-3 h-3 text-[#b45309]" />
               <span>{q}</span>
             </button>
           ))}
@@ -222,24 +211,23 @@ export const MikoDialogueModal: React.FC<MikoDialogueModalProps> = ({
             e.preventDefault();
             handleSendMessage();
           }}
-          className="flex items-center gap-2 pt-2 border-t border-stone-800 shrink-0"
+          className="flex items-center gap-2 pt-2 border-t border-[#e3d6c0] shrink-0"
         >
           <input
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder={`Ask ${guideName.split('(')[0]} for wisdom, lore, or ritual advice...`}
-            className="flex-1 px-3.5 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs sm:text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+            className="flex-1 px-3.5 py-2.5 bg-[#fffcf6] border border-[#e3d6c0] rounded-xl text-xs sm:text-sm text-[#2c241c] placeholder-[#a8967f] focus:outline-none focus:border-[#b45309]"
           />
           <button
             type="submit"
             disabled={!inputText.trim() || isLoading}
-            className="p-2.5 rounded-xl bg-gradient-to-r from-red-700 to-amber-700 hover:from-red-600 hover:to-amber-600 disabled:opacity-40 text-amber-100 border border-amber-600/40 transition-all cursor-pointer shadow"
+            className="p-2.5 rounded-xl bg-gradient-to-r from-[#a3170f] to-[#c2410c] hover:from-[#b91c1c] hover:to-[#c2410c] disabled:opacity-40 text-[#fff7e6] border border-[#d6b98c] transition-all cursor-pointer shadow"
           >
             <Send className="w-4 h-4" />
           </button>
         </form>
-      </div>
-    </div>
+    </Sheet>
   );
 };
