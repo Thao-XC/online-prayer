@@ -1412,6 +1412,37 @@ export class ShrineScene {
     }
   }
 
+  /** Show the visitor's goen-musubi cords tied around this shrine's sacred tree */
+  public setCords(colors: number[]) {
+    const tree = this.scene.getObjectByName('goshinboku');
+    if (!tree) return;
+    const old = tree.getObjectByName('cords');
+    if (old) tree.remove(old);
+    const g = new THREE.Group();
+    g.name = 'cords';
+    colors.forEach((c, i) => {
+      const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 });
+      const y = 1.0 + (i % 9) * 0.15 + Math.floor(i / 9) * 0.05;
+      const r = 0.92 - 0.44 * Math.min(1, y / 4.95) + 0.03;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.025, 6, 24), mat);
+      ring.rotation.x = Math.PI / 2 + Math.sin(i * 2.1) * 0.08;
+      ring.position.y = y;
+      g.add(ring);
+      // the knot and two short tails
+      const a = i * 2.4;
+      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat);
+      knot.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+      g.add(knot);
+      [-0.05, 0.05].forEach((d) => {
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.26, 0.01), mat);
+        tail.position.set(Math.cos(a + d) * (r + 0.02), y - 0.14, Math.sin(a + d) * (r + 0.02));
+        tail.rotation.y = -a;
+        g.add(tail);
+      });
+    });
+    tree.add(g);
+  }
+
   /**
    * Cleanup
    */

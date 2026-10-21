@@ -22,6 +22,9 @@ import {
 import { Map, Volume2, VolumeX, Sparkles, BookOpen, Flame } from 'lucide-react';
 import { luckService } from './services/luckService';
 import { LuckChip, LuckToasts, CaptionBar, StoryCardSheet, LuckSheet } from './components/LuckAndLegends';
+import { OmamoriModal } from './components/OmamoriModal';
+import { pilgrimService } from './services/pilgrimService';
+import { OMAMORI, MONTHLY_SEAL } from './data/pilgrimData';
 import type { StoryCard } from './three/encounters/types';
 
 export default function App() {
@@ -43,7 +46,7 @@ export default function App() {
 
   // Modals
   const [activeModal, setActiveModal] = useState<
-    'temizuya' | 'saisen' | 'omikuji' | 'ema' | 'goshuin' | 'miko' | 'daily' | null
+    'temizuya' | 'saisen' | 'omikuji' | 'ema' | 'goshuin' | 'miko' | 'daily' | 'omamori' | null
   >(null);
 
   // Daily Pilgrimage State
@@ -90,7 +93,8 @@ export default function App() {
   const [showLuck, setShowLuck] = useState(false);
   const [inLegend, setInLegend] = useState(false);
   // per-visit manners
-  const visit = useRef({ purified: false, worshipped: false, incense: false });
+  const visit = useRef({ purified: false, worshipped: false, incense: false, cord: false });
+  const shrinesStamped = new Set(goshuinList.map((g) => g.shrineId)).size;
 
   // Nearby spot callback state
   const [nearbySpot, setNearbySpot] = useState<{ id: string; name: string; type: string } | null>(null);
@@ -122,6 +126,7 @@ export default function App() {
       onSecret: (id, card, luck) => {
         const first = luckService.markFound(id);
         if (first) luckService.change(luck, `Secret found: ${card.title}`);
+        pilgrimService.saveCard(id, card);
         setStoryCard({ card, luck, firstTime: first });
       },
       onEncounter: (e) => {
@@ -135,11 +140,13 @@ export default function App() {
           setCaption(null);
           const first = luckService.markFound(e.id);
           if (first) luckService.change(4, `Legend discovered: ${e.card.title}`);
+          pilgrimService.saveCard(e.id, e.card);
           setStoryCard({ card: e.card, luck: 4, firstTime: first });
         }
       },
     });
-    visit.current = { purified: false, worshipped: false, incense: false };
+    visit.current = { purified: false, worshipped: false, incense: false, cord: false };
+    scene.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => OMAMORI[c.kind].cord));
 
     scene.setTimeOfDay(timeOfDay);
     sceneInstanceRef.current = scene;
@@ -192,7 +199,8 @@ export default function App() {
   // Save Goshuin
   const handleAddGoshuin = (entry: GoshuinEntry) => {
     setGoshuinList((prev) => {
-      if (prev.some((g) => g.shrineId === entry.shrineId)) return prev;
+      // one seal per shrine per month (monthly seals change design)
+      if (prev.some((g) => g.shrineId === entry.shrineId && (g.ym ?? '') === (entry.ym ?? ''))) return prev;
       const updated = [...prev, entry];
       localStorage.setItem('vjinja_goshuin', JSON.stringify(updated));
       return updated;
@@ -318,7 +326,7 @@ export default function App() {
         <JapanMapPicker
           onSelectShrine={handleSelectShrineFromMap}
           onOpenGoshuin={() => setActiveModal('goshuin')}
-          goshuinCount={goshuinList.length}
+          goshuinCount={shrinesStamped}
           onOpenDailyPilgrimage={() => setActiveModal('daily')}
           onOpenLuck={() => setShowLuck(true)}
           dailyProgress={{
@@ -384,7 +392,7 @@ export default function App() {
               <BookOpen className="w-4 h-4 text-[#b45309]" />
               <span className="hidden sm:inline">Goshuinchō</span>
               <span className="text-[10px] bg-[#ebdcc7] text-[#78350f] px-1.5 py-0.5 rounded font-mono font-bold">
-                {goshuinList.length}/{SHRINES.length}
+                {shrinesStamped}/{SHRINES.length}
               </span>
             </button>
 
@@ -411,6 +419,7 @@ export default function App() {
             onOpenOmikuji={() => setActiveModal('omikuji')}
             onOpenEma={() => setActiveModal('ema')}
             onOpenGoshuin={() => setActiveModal('goshuin')}
+            onOpenOmamori={() => setActiveModal('omamori')}
             onOpenMikoDialogue={() => setActiveModal('miko')}
             onOpenDailyPilgrimage={() => setActiveModal('daily')}
             dailyProgress={{
@@ -484,7 +493,9 @@ export default function App() {
               shrineName: currentShrine.name,
               kanjiName: currentShrine.kanjiName,
               date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
-              sealColor: '#c52210',
+              sealColor: MONTHLY_SEAL[new Date().getMonth() + 1].color,
+              month: new Date().getMonth() + 1,
+              ym: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
             });
             handleRitualProgress('saisen');
           }}
@@ -524,6 +535,23 @@ export default function App() {
             handleRitualProgress('goshuin');
           }}
           onClose={() => setActiveModal(null)}
+          onOpenCard={(_id, card) => setStoryCard({ card, luck: 0, firstTime: false })}
+        />
+      )}
+
+      {activeModal === 'omamori' && (
+        <OmamoriModal
+          shrine={currentShrine}
+          tiedHere={pilgrimService.cordsFor(currentShrine.id).length}
+          onClose={() => setActiveModal(null)}
+          onReceive={(kind, forWhom) => {
+            pilgrimService.receiveOmamori({ kind, forWhom, shrineId: currentShrine.id, shrineName: currentShrine.name, kanjiName: currentShrine.kanjiName });
+            sceneInstanceRef.current?.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => OMAMORI[c.kind].cord));
+            if (!visit.current.cord) {
+              visit.current.cord = true;
+              luckService.change(1, 'Tied a goen-musubi cord to the sacred tree');
+            }
+          }}
         />
       )}
 

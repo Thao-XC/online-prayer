@@ -28,6 +28,7 @@ interface ControlDockProps {
   onOpenOmikuji: () => void;
   onOpenEma: () => void;
   onOpenGoshuin: () => void;
+  onOpenOmamori?: () => void;
   onOpenMikoDialogue: () => void;
   onOpenDailyPilgrimage: () => void;
   dailyProgress: { completed: number; total: number; streak: number };
@@ -53,6 +54,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   onOpenOmikuji,
   onOpenEma,
   onOpenGoshuin,
+  onOpenOmamori,
   onOpenMikoDialogue,
   onOpenDailyPilgrimage,
   dailyProgress,
@@ -252,6 +254,21 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 <div className="text-[10px] text-[#6d5b49] font-kanji">絵馬を奉納する</div>
               </div>
             </button>
+
+            {onOpenOmamori && (
+              <button
+                onClick={onOpenOmamori}
+                className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-[#d9577f]/60 bg-[#fffcf6] hover:bg-[#fdf1f4] text-left transition-all cursor-pointer flex items-center gap-2 group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#fdecf1] border border-[#e8a8bc] text-[#c2416b] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform font-kanji text-sm font-bold">
+                  守
+                </div>
+                <div className="truncate">
+                  <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#c2416b]">Omamori</div>
+                  <div className="text-[10px] text-[#6d5b49] font-kanji">御守・縁結び</div>
+                </div>
+              </button>
+            )}
 
             <button
               onClick={onOpenGoshuin}

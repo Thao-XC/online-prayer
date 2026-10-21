@@ -97,6 +97,10 @@ export interface GoshuinEntry {
   kanjiName: string;
   date: string;
   sealColor: string;
+  /** month (1–12) of a monthly seal (月替わり御朱印) */
+  month?: number;
+  /** 'YYYY-MM' — one seal per shrine per month */
+  ym?: string;
 }
 
 export interface DailyMission {

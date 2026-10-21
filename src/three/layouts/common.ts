@@ -7,7 +7,42 @@ type Place = [number, number, number?];
 export function ritualSet(ctx: LayoutCtx, o: { temizuya?: Place; ema?: Place; omikuji?: Place }) {
   if (o.temizuya) ctx.add(ctx.builder.buildTemizuya(), o.temizuya[0], o.temizuya[1], o.temizuya[2] ?? 0);
   if (o.ema) ctx.add(ctx.builder.buildEmaRack(), o.ema[0], o.ema[1], o.ema[2] ?? 0);
-  if (o.omikuji) ctx.add(ctx.arch.omikujiStand(), o.omikuji[0], o.omikuji[1], o.omikuji[2] ?? 0);
+  if (o.omikuji) {
+    const g = new THREE.Group();
+    g.add(ctx.arch.omikujiStand());
+    const tree = sacredTree(ctx);
+    // on the outer side of the stand, away from the halls in the middle of the precinct
+    tree.position.set(3.8 * (Math.sign(o.omikuji[0]) || -1), 0, -1.4);
+    g.add(tree);
+    ctx.add(g, o.omikuji[0], o.omikuji[1], o.omikuji[2] ?? 0);
+  }
+}
+
+/** Trunk radius of the sacred tree at height y (for wrapping ropes and cords) */
+export const SACRED_TRUNK = (y: number) => 0.92 - 0.44 * Math.min(1, y / 4.95);
+
+/**
+ * Goshinboku: a sacred tree girded with shimenawa and paper streamers.
+ * Visitors' goen-musubi cords are tied around its trunk (see ShrineScene.setCords).
+ */
+export function sacredTree(ctx: LayoutCtx): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'goshinboku';
+  g.add(ctx.nat.forest('camphor', [[0, 0, 0.55]], [0.55, 0.55], () => 0));
+  const y = 2.5;
+  const rope = new THREE.Mesh(new THREE.TorusGeometry(SACRED_TRUNK(y) + 0.06, 0.09, 8, 28), ctx.m.rope);
+  rope.rotation.x = Math.PI / 2;
+  rope.position.y = y;
+  g.add(rope);
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    const r = SACRED_TRUNK(y) + 0.12;
+    const shide = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.42), ctx.m.paper);
+    shide.position.set(Math.cos(a) * r, y - 0.28, Math.sin(a) * r);
+    shide.rotation.y = -a + Math.PI / 2;
+    g.add(shide);
+  }
+  return g;
 }
 
 /**

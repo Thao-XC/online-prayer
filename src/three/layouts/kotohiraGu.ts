@@ -72,7 +72,7 @@ export const kotohiraGu: Layout = (ctx) => {
     ctx.add(pic, 20.4, -8.5 + k * 1.0, -Math.PI / 2, 2.8);
   }
   ctx.add(ctx.builder.buildEmaRack(), 14, -4, -1.2);
-  ctx.add(arch.omikujiStand(), -14, -4, 1.2);
+  ritualSet(ctx, { omikuji: [-14, -4, 1.2] });
   const rail = arch.fence(30, 1.1, 'darkWood');
   ctx.add(rail, 0, -33);
 
