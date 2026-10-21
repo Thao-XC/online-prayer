@@ -1,0 +1,6 @@
+{
+  "name": "Online Prayer",
+  "description": "Online Prayer - Interactive 3D virtual pilgrimage to famous Japanese shrines and temples with a detailed interactive map, authentic cleansing and prayer rituals, omikuji fortunes, and serene beige aesthetic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
