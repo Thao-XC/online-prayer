@@ -1,3 +1,5 @@
+import { OmamoriArt } from './OmamoriArt';
+import { omamoriOf } from '../data/omamoriData';
 import React, { useState, useEffect } from 'react';
 import { ShrineData, ShrineSpot, TimeOfDay } from '../types/shrine';
 import {
@@ -260,12 +262,12 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 onClick={onOpenOmamori}
                 className="p-2 sm:p-2.5 rounded-xl border border-[#e3d6c0] hover:border-[#d9577f]/60 bg-[#fffcf6] hover:bg-[#fdf1f4] text-left transition-all cursor-pointer flex items-center gap-2 group"
               >
-                <div className="w-8 h-8 rounded-lg bg-[#fdecf1] border border-[#e8a8bc] text-[#c2416b] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform font-kanji text-sm font-bold">
-                  守
+                <div className="w-8 h-8 rounded-lg bg-[#fdecf1] border border-[#e8a8bc] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform overflow-visible">
+                  {omamoriOf(shrine.id)[0] && <OmamoriArt design={omamoriOf(shrine.id)[0]} size={18} />}
                 </div>
                 <div className="truncate">
                   <div className="text-xs font-semibold text-[#2c241c] group-hover:text-[#c2416b]">Omamori</div>
-                  <div className="text-[10px] text-[#6d5b49] font-kanji">御守・縁結び</div>
+                  <div className="text-[11px] text-[#6d5b49]"><span className="font-kanji">御守</span> · {omamoriOf(shrine.id).length} designs</div>
                 </div>
               </button>
             )}

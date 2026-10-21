@@ -7,7 +7,9 @@ import type { StoryCard } from '../three/encounters/types';
  */
 export interface Omamori {
   id: string;
-  kind: OmamoriKind;
+  /** old amulets only have a kind; new ones point at a shrine-specific design */
+  kind?: OmamoriKind;
+  designId?: string;
   shrineId: string;
   shrineName: string;
   kanjiName: string;
@@ -18,7 +20,8 @@ export interface Omamori {
 }
 
 export interface TiedCord {
-  kind: OmamoriKind;
+  kind?: OmamoriKind;
+  designId?: string;
   forWhom?: string;
   at: number;
 }
@@ -76,7 +79,7 @@ export const pilgrimService = {
     state = {
       ...state,
       pouch: [item, ...state.pouch],
-      cords: { ...state.cords, [o.shrineId]: [...tied, { kind: o.kind, forWhom: o.forWhom, at }].slice(-40) },
+      cords: { ...state.cords, [o.shrineId]: [...tied, { kind: o.kind, designId: o.designId, forWhom: o.forWhom, at }].slice(-40) },
     };
     emit();
     return item;

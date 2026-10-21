@@ -61,3 +61,24 @@
     animation: none;
   }
 }
+
+/* Omamori: a gentle swing from the cord, and a little hop when chosen */
+@keyframes omamori-swing {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+@keyframes omamori-hop {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-6px) scale(1.06); }
+  100% { transform: translateY(0) scale(1); }
+}
+.omamori-swing {
+  transform-origin: 50% 4%;
+  animation: omamori-swing 3.2s ease-in-out infinite;
+}
+.omamori-hop {
+  animation: omamori-hop 0.35s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .omamori-swing, .omamori-hop { animation: none; }
+}

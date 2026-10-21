@@ -40,6 +40,8 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { Sheet } from './ui/Sheet';
+import { OmamoriArt } from './OmamoriArt';
+import { omamoriOf } from '../data/omamoriData';
 import { useBackLayer } from '../services/backStack';
 
 interface JapanMapPickerProps {
@@ -1394,6 +1396,20 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                   })}
                 </ul>
                 <p className="mt-2.5 text-xs text-[#6d5b49] italic">You can pray for anything here. Every kami and Buddha hears every sincere prayer.</p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#f5ece0] border border-[#d8cabb]">
+                <div className="text-xs text-[#9a3412] font-semibold flex items-center gap-1.5">
+                  <span aria-hidden>🧧</span> Omamori only found here <span className="font-kanji font-normal text-[#6d5b49]">御守</span>
+                </div>
+                <div className="mt-2 flex items-end gap-2.5 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
+                  {omamoriOf(selectedShrine.id).map((d) => (
+                    <div key={d.id} className="flex flex-col items-center gap-1 shrink-0 w-14" title={`${d.name}: ${d.blurb}`}>
+                      <OmamoriArt design={d} size={38} />
+                      <span className="font-kanji text-[11px] text-[#3d3124] leading-tight text-center">{d.jp}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

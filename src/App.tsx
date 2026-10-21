@@ -25,7 +25,8 @@ import { luckService } from './services/luckService';
 import { LuckChip, LuckToasts, CaptionBar, StoryCardSheet, LuckSheet } from './components/LuckAndLegends';
 import { OmamoriModal } from './components/OmamoriModal';
 import { pilgrimService } from './services/pilgrimService';
-import { OMAMORI, MONTHLY_SEAL } from './data/pilgrimData';
+import { MONTHLY_SEAL } from './data/pilgrimData';
+import { designFor, cordHex } from './data/omamoriData';
 import type { StoryCard } from './three/encounters/types';
 
 export default function App() {
@@ -151,7 +152,7 @@ export default function App() {
       },
     });
     visit.current = { purified: false, worshipped: false, incense: false, cord: false };
-    scene.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => OMAMORI[c.kind].cord));
+    scene.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => cordHex(designFor(c))));
 
     scene.setTimeOfDay(timeOfDay);
     sceneInstanceRef.current = scene;
@@ -556,9 +557,9 @@ export default function App() {
           shrine={currentShrine}
           tiedHere={pilgrimService.cordsFor(currentShrine.id).length}
           onClose={() => setActiveModal(null)}
-          onReceive={(kind, forWhom) => {
-            pilgrimService.receiveOmamori({ kind, forWhom, shrineId: currentShrine.id, shrineName: currentShrine.name, kanjiName: currentShrine.kanjiName });
-            sceneInstanceRef.current?.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => OMAMORI[c.kind].cord));
+          onReceive={(designId, forWhom) => {
+            pilgrimService.receiveOmamori({ designId, forWhom, shrineId: currentShrine.id, shrineName: currentShrine.name, kanjiName: currentShrine.kanjiName });
+            sceneInstanceRef.current?.setCords(pilgrimService.cordsFor(currentShrine.id).map((c) => cordHex(designFor(c))));
             if (!visit.current.cord) {
               visit.current.cord = true;
               luckService.change(1, 'Tied a goen-musubi cord to the sacred tree');
