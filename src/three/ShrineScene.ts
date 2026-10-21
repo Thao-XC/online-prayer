@@ -36,7 +36,7 @@ export class ShrineScene {
 
   // Player & Navigation
   public playerPosition = new THREE.Vector3(0, 1.7, 30);
-  public playerRotationY = Math.PI; // Face north toward shrine
+  public playerRotationY = 0; // forward is -Z, i.e. toward the main hall
   public playerPitch = 0; // Look up/down
 
   // Camera Target
@@ -389,7 +389,7 @@ export class ShrineScene {
 
     // Set initial player position
     this.playerPosition.set(0, 1.7, 31);
-    this.playerRotationY = Math.PI;
+    this.playerRotationY = 0; // face the main hall (forward vector is -Z)
     this.setTimeOfDay('day');
   }
 

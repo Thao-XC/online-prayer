@@ -73,7 +73,7 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
-        className="fixed bottom-24 left-6 z-30 w-28 h-28 rounded-full bg-stone-900/40 border border-stone-600/40 backdrop-blur-xs flex items-center justify-center touch-none select-none pointer-events-auto"
+        className="fixed bottom-44 left-4 z-30 w-28 h-28 rounded-full bg-stone-900/40 border border-stone-600/40 backdrop-blur-xs flex items-center justify-center touch-none select-none pointer-events-auto"
       >
         {/* Joystick Center Indicator */}
         <div className="w-8 h-8 rounded-full border border-stone-500/30 bg-stone-800/20" />

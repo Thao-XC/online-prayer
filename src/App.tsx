@@ -286,18 +286,18 @@ export default function App() {
           />
 
           {/* Top Left Minimal Header & Map Back Button (Unobtrusive & Beige Theme) */}
-          <div className="fixed top-4 left-4 z-30 flex items-center gap-2 pointer-events-auto">
+          <div className="fixed top-3 left-3 sm:top-4 sm:left-4 z-30 flex items-center gap-2 pointer-events-auto min-w-0">
             <button
               onClick={handleReturnToMap}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#fbf8f0]/95 hover:bg-[#f3ebd7] text-[#2c241c] border border-[#d8cabb] text-xs font-cinzel font-bold transition-all shadow-md hover:border-[#b45309] cursor-pointer"
             >
               <Map className="w-4 h-4 text-[#b91c1c]" />
-              <span>Japan Map</span>
+              <span className="hidden sm:inline">Japan Map</span>
             </button>
 
-            <div className="px-3.5 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md flex items-center gap-2">
-              <span className="font-kanji font-bold text-[#b91c1c]">
-                {currentShrine.kanjiName}
+            <div className="px-3 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md flex items-center gap-2 min-w-0 max-w-[38vw] sm:max-w-none">
+              <span className="font-kanji font-bold text-[#b91c1c] truncate">
+                {currentShrine.kanjiName.split('（')[0]}
               </span>
               <span className="text-[#6d5b49] hidden sm:inline">
                 ({currentShrine.region} • {currentShrine.prefecture})
@@ -306,7 +306,7 @@ export default function App() {
           </div>
 
           {/* Top Right Quick Stamps, Daily Pilgrimage Missions & Sound */}
-          <div className="fixed top-4 right-4 z-30 flex items-center gap-2 pointer-events-auto">
+          <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30 flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
             {/* Daily Pilgrimage Progress Tracker in 3D HUD */}
             <button
               onClick={() => setActiveModal('daily')}
@@ -343,32 +343,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Interactive Proximity Prompt (Floating above bottom dock when near a spot) */}
-          {nearbySpot && !activeModal && (
-            <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <button
-                onClick={handleInteractWithSpot}
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-red-700 via-amber-700 to-red-600 hover:from-red-600 hover:to-amber-500 text-amber-100 font-cinzel font-semibold text-xs sm:text-sm border border-amber-400/60 shadow-2xl flex items-center gap-2.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>
-                  Press [E] or Click to{' '}
-                  {nearbySpot.type === 'temizuya'
-                    ? 'Purify at Water Basin'
-                    : nearbySpot.type === 'haiden'
-                    ? 'Offer Coin & Pray'
-                    : nearbySpot.type === 'omikuji'
-                    ? 'Draw Fortune Slip'
-                    : nearbySpot.type === 'ema'
-                    ? 'Hang Prayer Tablet'
-                    : nearbySpot.type === 'jokoro'
-                    ? 'Waft Incense Smoke'
-                    : 'Bow in Reverence'}
-                </span>
-              </button>
-            </div>
-          )}
-
           {/* Consolidated Collapsible Bottom Dock (Zero Viewport Occlusion) */}
           <ControlDock
             shrine={currentShrine}
@@ -395,14 +369,33 @@ export default function App() {
             isAutoCycle={isAutoCycle}
             onToggleAutoCycle={handleToggleAutoCycle}
             currentNearbySpot={nearbySpot}
-          />
+          >
+            {nearbySpot && !activeModal && (
+              <button
+                onClick={handleInteractWithSpot}
+                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-red-700 via-amber-700 to-red-600 hover:from-red-600 hover:to-amber-500 text-amber-100 font-cinzel font-semibold text-xs sm:text-sm border border-amber-400/60 shadow-2xl flex items-center gap-2.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>
+                  <span className="pointer-coarse:hidden">[E] </span>
+                  {nearbySpot.type === 'temizuya'
+                    ? 'Purify at Water Basin'
+                    : nearbySpot.type === 'haiden'
+                    ? 'Offer Coin & Pray'
+                    : nearbySpot.type === 'omikuji'
+                    ? 'Draw Fortune Slip'
+                    : nearbySpot.type === 'ema'
+                    ? 'Hang Prayer Tablet'
+                    : nearbySpot.type === 'jokoro'
+                    ? 'Waft Incense Smoke'
+                    : 'Bow in Reverence'}
+                </span>
+              </button>
+            )}
+          </ControlDock>
 
           {/* Virtual Touch Joystick for Mobile / Tablets */}
-          <VirtualJoystick
-            onMove={handleJoystickMove}
-            onInteract={nearbySpot ? handleInteractWithSpot : undefined}
-            interactLabel={nearbySpot ? `Interact: ${nearbySpot.name.split('(')[0]}` : null}
-          />
+          <VirtualJoystick onMove={handleJoystickMove} />
         </>
       )}
 
