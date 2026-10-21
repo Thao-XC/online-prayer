@@ -19,7 +19,8 @@ import {
   saveDailyPilgrimageState,
   updatePilgrimageRitual,
 } from './services/dailyPilgrimageService';
-import { Map, Volume2, VolumeX, Sparkles, BookOpen, Flame } from 'lucide-react';
+import { ArrowLeft, Volume2, VolumeX, Sparkles, BookOpen, Flame } from 'lucide-react';
+import { useBackLayer } from './services/backStack';
 import { luckService } from './services/luckService';
 import { LuckChip, LuckToasts, CaptionBar, StoryCardSheet, LuckSheet } from './components/LuckAndLegends';
 import { OmamoriModal } from './components/OmamoriModal';
@@ -135,6 +136,10 @@ export default function App() {
           setActiveModal(null);
         } else if (e.type === 'caption' && e.text) {
           showCaption(e.text, e.seconds ?? 4);
+        } else if (e.type === 'end' && !e.card) {
+          // left early with Back / Esc
+          setInLegend(false);
+          setCaption(null);
         } else if (e.type === 'end' && e.card) {
           setInLegend(false);
           setCaption(null);
@@ -265,6 +270,10 @@ export default function App() {
     setActiveModal(null);
   };
 
+  // Back / Esc / browser back: leave a hidden world first, then the 3D visit itself
+  useBackLayer(viewMode === 'explore', handleReturnToMap);
+  useBackLayer(inLegend, () => sceneInstanceRef.current?.leaveLegend());
+
   // Interactive Spot Trigger (e.g. Press 'E' or Tap button)
   const handleInteractWithSpot = () => {
     if (!nearbySpot) return;
@@ -349,11 +358,14 @@ export default function App() {
           {/* Top Left Minimal Header & Map Back Button (Unobtrusive & Beige Theme) */}
           <div className="fixed top-3 left-3 sm:top-4 sm:left-4 z-30 flex items-center gap-2 pointer-events-auto min-w-0">
             <button
-              onClick={handleReturnToMap}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#fbf8f0]/95 hover:bg-[#f3ebd7] text-[#2c241c] border border-[#d8cabb] text-xs font-cinzel font-bold transition-all shadow-md hover:border-[#b45309] cursor-pointer"
+              onClick={() => (inLegend ? sceneInstanceRef.current?.leaveLegend() : handleReturnToMap())}
+              className="flex items-center gap-1.5 pl-2.5 pr-3.5 py-2 rounded-xl bg-[#fbf8f0]/95 hover:bg-[#f3ebd7] text-[#2c241c] border border-[#d8cabb] text-xs font-semibold transition-all shadow-md hover:border-[#b45309] cursor-pointer"
+              title={inLegend ? 'Back to the shrine (Esc)' : 'Back to the map (Esc)'}
+              aria-label={inLegend ? 'Back to the shrine' : 'Back to the map'}
             >
-              <Map className="w-4 h-4 text-[#b91c1c]" />
-              <span className="hidden sm:inline">Japan Map</span>
+              <ArrowLeft className="w-4 h-4 text-[#b91c1c]" />
+              <span>{inLegend ? 'Shrine' : 'Map'}</span>
+              <kbd className="hidden pointer-fine:inline ml-1 px-1 rounded border border-[#d8cabb] text-[10px] text-[#6d5b49] font-sans">Esc</kbd>
             </button>
 
             <div className="hidden min-[480px]:flex px-3 py-1.5 rounded-xl bg-[#fbf8f0]/95 border border-[#d8cabb] text-xs shadow-md items-center gap-2 min-w-0 max-w-[38vw] sm:max-w-none">

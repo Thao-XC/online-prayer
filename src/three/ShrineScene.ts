@@ -1268,6 +1268,19 @@ export class ShrineScene {
     this.fadeTo(color, 0, 1.2, () => this.callbacks.onEncounter?.({ type: 'end', id: def.id, card: def.card }));
   }
 
+  /** Back / Esc during a hidden world: surface at the exit without finishing the legend */
+  public leaveLegend() {
+    if (!this.enc) return false;
+    const def = this.enc.def;
+    this.abortEncounter();
+    this.playerPosition.set(def.exit.x, 1.7 + this.ground(def.exit.x, def.exit.z), def.exit.z);
+    this.playerRotationY = def.exit.rotY;
+    this.playerPitch = 0;
+    this.encCooldown = 4;
+    this.callbacks.onEncounter?.({ type: 'end', id: def.id });
+    return true;
+  }
+
   /** used when teleporting away mid-encounter */
   private abortEncounter() {
     this.fade = null;
