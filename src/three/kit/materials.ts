@@ -8,7 +8,7 @@ import type { ShrineTextureLibrary } from '../proceduralTextures';
  * Ryukyu red tile, gold leaf, bronze patina and so on.
  */
 export type WoodTone = 'vermilion' | 'darkWood' | 'cypress' | 'black' | 'white' | 'gold' | 'stone' | 'bronze';
-export type RoofTone = 'tile' | 'copper' | 'bark' | 'thatch' | 'redtile' | 'gold' | 'darkCopper';
+export type RoofTone = 'tile' | 'copper' | 'bark' | 'thatch' | 'redtile' | 'gold' | 'darkCopper' | 'snow';
 
 export interface KitMaterials {
   wood: Record<WoodTone, THREE.MeshStandardMaterial>;
@@ -97,7 +97,7 @@ export function createKitMaterials(tex: ShrineTextureLibrary): KitMaterials {
   return {
     wood: {
       vermilion: std({ map: tex.vermilion, color: 0xd9381e, roughness: 0.45 }),
-      darkWood: std({ map: tex.darkWood, color: 0x4a3526, roughness: 0.8 }),
+      darkWood: std({ map: tex.darkWood, color: 0x6b5340, roughness: 0.85 }),
       cypress: std({ map: tex.cypressWood, color: 0xc8a27a, roughness: 0.7 }),
       black: std({ color: 0x1c1a1a, roughness: 0.3 }),
       white: std({ color: 0xf2eee6, roughness: 0.8 }),
@@ -113,6 +113,7 @@ export function createKitMaterials(tex: ShrineTextureLibrary): KitMaterials {
       thatch: std({ map: thatchTex, color: 0xd8c08c, roughness: 1, side: THREE.DoubleSide }),
       redtile: std({ map: redTileTex, color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide }),
       gold: std({ color: 0xd39a12, roughness: 0.45, metalness: 0.2, envMapIntensity: 0.3, emissive: 0x2a1600, side: THREE.DoubleSide }),
+      snow: std({ color: 0xf6f8fb, roughness: 0.95, side: THREE.DoubleSide }),
     },
     plaster: std({ map: plasterTex, color: 0xffffff, roughness: 0.9 }),
     shoji: std({ map: tex.shojiPaper, color: 0xfffcf5, roughness: 0.9 }),

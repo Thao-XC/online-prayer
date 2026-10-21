@@ -17,7 +17,7 @@ export function ritualSet(ctx: LayoutCtx, o: { temizuya?: Place; ema?: Place; om
 export function offering(ctx: LayoutCtx, x: number, z: number, floorY: number, kind: 'shrine' | 'temple', lanternText?: string, rotY = 0) {
   const g = new THREE.Group();
   const box = ctx.builder.buildSaisenBox();
-  box.scale.setScalar(kind === 'temple' ? 1.6 : 1.2);
+  box.scale.setScalar(kind === 'temple' ? 1.15 : 0.95);
   g.add(box);
   if (kind === 'shrine') {
     const bell = ctx.builder.buildSuzuBell();

@@ -190,6 +190,8 @@ export class Architecture {
     veranda?: boolean;
     railing?: WoodTone;
     mokoshi?: boolean; // extra skirt roof (Daibutsuden, Hondo, Kinkaku)
+    /** walls only on three sides plus a framed doorway, so what's inside is visible */
+    hollow?: { door: number };
     bracket?: WoodTone;
   }): THREE.Group {
     const g = new THREE.Group();
@@ -230,10 +232,24 @@ export class Architecture {
       [o.w / 2, -o.w / 2].forEach((x) => g.add(cyl(0.26, 0.28, wallH, pillarM, x, y0 + 0.3 + wallH / 2, z, 10)));
     }
     // walls (inset)
-    g.add(box(o.w - 0.4, wallH, o.d - 0.4, wallM, 0, y0 + 0.3 + wallH / 2, -0.05));
+    const wy = y0 + 0.3 + wallH / 2;
+    if (o.hollow) {
+      const t = 0.35;
+      g.add(box(o.w - 0.4, wallH, t, wallM, 0, wy, -o.d / 2 + 0.2));
+      g.add(box(t, wallH, o.d - 0.4, wallM, -o.w / 2 + 0.2, wy, 0));
+      g.add(box(t, wallH, o.d - 0.4, wallM, o.w / 2 - 0.2, wy, 0));
+      const side = (o.w - 0.4 - o.hollow.door) / 2;
+      [-1, 1].forEach((s) => g.add(box(side, wallH, t, wallM, s * (o.hollow!.door / 2 + side / 2), wy, o.d / 2 - 0.2)));
+      g.add(box(o.hollow.door, wallH * 0.25, t, wallM, 0, y0 + 0.3 + wallH * 0.875, o.d / 2 - 0.2));
+      // dim interior floor and ceiling
+      g.add(box(o.w - 1, 0.1, o.d - 1, this.m.wood.darkWood, 0, y0 + 0.32, 0));
+      g.add(box(o.w - 0.4, 0.2, o.d - 0.4, this.m.interior, 0, y0 + 0.3 + wallH - 0.1, 0));
+    } else g.add(box(o.w - 0.4, wallH, o.d - 0.4, wallM, 0, wy, -0.05));
     // front facade
-    const front = o.front ?? 'shoji';
-    if (front === 'open') {
+    const front = o.hollow ? 'none' : o.front ?? 'shoji';
+    if (front === 'none') {
+      // doorway only
+    } else if (front === 'open') {
       g.add(box(o.w * 0.55, wallH * 0.8, 0.1, this.m.interior, 0, y0 + 0.3 + wallH * 0.4, o.d / 2 - 0.16));
     } else {
       const fm = front === 'shoji' ? this.m.shoji : front === 'doors' ? this.m.wood.darkWood : this.m.wood.darkWood;

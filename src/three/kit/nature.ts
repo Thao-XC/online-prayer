@@ -196,7 +196,19 @@ export class Nature {
     cliff.geometry.computeVertexNormals();
     cliff.position.set(0, h * 0.54, -w * 1.3);
     g.add(cliff);
-    const tex = this.m.water.map!.clone();
+    // streaky falling-water texture
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 256;
+    const g2 = c.getContext('2d')!;
+    g2.fillStyle = '#cfe6ee';
+    g2.fillRect(0, 0, 64, 256);
+    for (let i = 0; i < 90; i++) {
+      g2.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.8)' : 'rgba(120,170,190,0.5)';
+      g2.fillRect(Math.random() * 64, Math.random() * 256, 1 + Math.random() * 3, 20 + Math.random() * 60);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(1, 6);
     const fallMat = new THREE.MeshStandardMaterial({ map: tex, color: 0xeaf6fb, transparent: true, opacity: 0.92, roughness: 0.2, emissive: 0x334a55 });
