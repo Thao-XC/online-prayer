@@ -3,6 +3,7 @@ import { SHRINES } from '../data/shrinesData';
 import { ShrineData, ShrineType } from '../types/shrine';
 import { soundService } from '../services/soundService';
 import { LuckChip } from './LuckAndLegends';
+import { WISHES, WISH_ORDER, wishesOf, hasWish, type WishId } from '../data/wishesData';
 import { MAP_W, MAP_H, JAPAN_MAINLAND_PATH, OKINAWA_INSET, GRATICULE, MAP_LABELS } from '../data/japanGeo';
 import {
   MapPin,
@@ -86,6 +87,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   const [selectedId, setSelectedId] = useState<string>(SHRINES[0].id);
   const [typeFilter, setTypeFilter] = useState<'all' | ShrineType>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
+  const [wishFilter, setWishFilter] = useState<'all' | WishId>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'map' | 'directory'>('map');
   const [zoomLevel, setZoomLevel] = useState(1.0);
@@ -125,6 +127,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   const filteredShrines = useMemo(() => {
     return SHRINES.filter((shrine) => {
       if (typeFilter !== 'all' && shrine.type !== typeFilter) return false;
+      if (wishFilter !== 'all' && !hasWish(shrine.id, wishFilter)) return false;
       if (regionFilter !== 'all') {
         if (regionFilter === 'Okinawa') {
           if (shrine.prefecture.toLowerCase().includes('okinawa') || shrine.id === 'naminoue-gu') {
@@ -147,13 +150,17 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           shrine.primaryBlessing.toLowerCase().includes(q) ||
           shrine.tagline.toLowerCase().includes(q);
         const matchesDeity = shrine.enshrinedDeityOrBuddha.toLowerCase().includes(q);
-        if (!matchesName && !matchesLocation && !matchesBlessing && !matchesDeity) {
+        const matchesWish = wishesOf(shrine.id).some((w) => {
+          const c = WISHES[w.wish];
+          return c.en.toLowerCase().includes(q) || c.short.toLowerCase().includes(q) || c.jp.includes(q) || c.reading.includes(q);
+        });
+        if (!matchesName && !matchesLocation && !matchesBlessing && !matchesDeity && !matchesWish) {
           return false;
         }
       }
       return true;
     });
-  }, [typeFilter, regionFilter, searchQuery]);
+  }, [typeFilter, regionFilter, wishFilter, searchQuery]);
 
   const handleToggleSound = () => {
     const nextMuted = !isMuted;
@@ -225,8 +232,21 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
         : region === 'Okinawa'
         ? SHRINES.filter((s) => s.prefecture.toLowerCase().includes('okinawa'))
         : SHRINES.filter((s) => s.region === region);
-    fitToShrines(inRegion);
+    fitToShrines(wishFilter === 'all' ? inRegion : inRegion.filter((s) => hasWish(s.id, wishFilter)));
     soundService.playFootstep();
+  };
+
+  const inRegionFilter = (s: ShrineData) =>
+    regionFilter === 'all' ? true : regionFilter === 'Okinawa' ? s.prefecture.toLowerCase().includes('okinawa') : s.region === regionFilter;
+
+  const handleSelectWish = (w: 'all' | WishId) => {
+    const next = w === wishFilter ? 'all' : w;
+    setWishFilter(next);
+    const list = SHRINES.filter((s) => inRegionFilter(s) && (next === 'all' || hasWish(s.id, next)));
+    fitToShrines(list.length === SHRINES.length ? SHRINES : list);
+    // keep the details panel on something that matches
+    if (next !== 'all' && list.length && !list.some((s) => s.id === selectedId)) setSelectedId(list[0].id);
+    soundService.playZenTone(next === 'all' ? 0 : WISH_ORDER.indexOf(next) % 5);
   };
 
   // Zoom towards a specific point (mouse cursor or center)
@@ -271,6 +291,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
     setZoomLevel(1.0);
     setPanOffset({ x: 0, y: 0 });
     setRegionFilter('all');
+    setWishFilter('all');
     soundService.playFootstep();
   };
 
@@ -682,6 +703,49 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                 );
               })}
             </div>
+
+            {/* Wish Pills: what each place is famous for */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs" role="group" aria-label="Filter by wish">
+              <span className="text-[11px] font-semibold text-[#6e5b47] flex items-center gap-1 shrink-0">
+                <Heart className="w-3.5 h-3.5 text-[#b91c1c]" /> Wish:
+              </span>
+              {(['all', ...WISH_ORDER] as const).map((w) => {
+                const isSelected = wishFilter === w;
+                const c = w === 'all' ? null : WISHES[w];
+                const count = w === 'all' ? SHRINES.length : SHRINES.filter((s) => hasWish(s.id, w)).length;
+                return (
+                  <button
+                    key={w}
+                    onClick={() => handleSelectWish(w)}
+                    aria-pressed={isSelected}
+                    title={c ? `${c.jp} (${c.reading}): ${c.en}` : 'Any wish'}
+                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all cursor-pointer flex items-center gap-1 border ${
+                      isSelected ? 'text-white font-bold shadow-xs' : 'bg-[#fcf9f2] border-[#ded2be] text-[#5a4837] hover:text-[#2c241c] hover:border-[#b89f81] hover:bg-[#f5ede0]'
+                    }`}
+                    style={isSelected ? { background: c?.color ?? '#2c241c', borderColor: c?.color ?? '#2c241c' } : undefined}
+                  >
+                    {c ? (
+                      <>
+                        <span aria-hidden>{c.emoji}</span>
+                        <span className="font-kanji">{c.jp.split('・')[0]}</span>
+                        <span className="hidden sm:inline font-sans">{c.short}</span>
+                      </>
+                    ) : (
+                      <span>Any</span>
+                    )}
+                    <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+            {wishFilter !== 'all' && (
+              <p className="text-[11px] text-[#6d5b49] leading-snug -mt-0.5 truncate sm:whitespace-normal">
+                <span className="font-semibold" style={{ color: WISHES[wishFilter].color }}>
+                  {WISHES[wishFilter].emoji} {WISHES[wishFilter].en}
+                </span>
+                 are what these places are famous for.<span className="hidden sm:inline"> You can still pray for anything at any shrine or temple.</span>
+              </p>
+            )}
           </div>
 
           {/* VIEW 1: HIGH-FIDELITY DETAILED JAPAN VECTOR MAP IN BEIGE */}
@@ -1038,8 +1102,21 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
                       {/* Bottom Footer Actions */}
                       <div className="pt-2 border-t border-[#ded1be] flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-[#854d0e] font-mono font-medium truncate">
-                          ★ {shrine.primaryBlessing.split(',')[0]}
+                        <span className="flex items-center gap-1 min-w-0 overflow-hidden">
+                          {wishesOf(shrine.id).map(({ wish }) => {
+                            const c = WISHES[wish];
+                            const on = wishFilter === wish;
+                            return (
+                              <span
+                                key={wish}
+                                title={c.en}
+                                className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border whitespace-nowrap"
+                                style={{ color: on ? '#fff' : c.color, background: on ? c.color : `${c.color}14`, borderColor: `${c.color}55` }}
+                              >
+                                {c.emoji} {c.short}
+                              </span>
+                            );
+                          })}
                         </span>
 
                         <button
@@ -1151,6 +1228,23 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                 <div className="text-xs sm:text-sm font-semibold text-[#7c2d12] mt-1">
                   {selectedShrine.primaryBlessing}
                 </div>
+                <ul className="mt-2.5 space-y-2">
+                  {wishesOf(selectedShrine.id).map(({ wish, why }) => {
+                    const c = WISHES[wish];
+                    return (
+                      <li key={wish} className="flex gap-2 items-start">
+                        <span
+                          className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-white whitespace-nowrap"
+                          style={{ background: c.color }}
+                        >
+                          {c.emoji} <span className="font-kanji">{c.jp}</span>
+                        </span>
+                        <span className="text-[11px] text-[#4a3b2b] leading-snug">{why}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-2 text-[10px] text-[#8a7762] italic">Known for these, but every kami and Buddha hears every sincere prayer.</p>
               </div>
             </div>
 
