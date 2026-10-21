@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { useBackLayer } from '../../services/backStack';
 
 type SheetSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -27,7 +28,7 @@ const WIDTH: Record<SheetSize, string> = {
  * One responsive popup for the whole app.
  * - Phone: bottom sheet, full width, grab handle, swipe down to dismiss.
  * - PC: centred dialog.
- * - Both: Esc, tapping the backdrop, or the × button closes it; page behind doesn't scroll.
+ * - Both: Esc, back button/gesture, tapping the backdrop, or the × button closes it; page behind doesn't scroll.
  */
 export const Sheet: React.FC<SheetProps> = ({
   onClose,
@@ -41,22 +42,17 @@ export const Sheet: React.FC<SheetProps> = ({
   const dragStart = useRef<number | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
+  // Esc, the browser back button and Android back all close the topmost sheet only
+  useBackLayer(true, onClose);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     closeRef.current?.focus({ preventScroll: true });
     return () => {
-      window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, []);
 
   // Swipe-down-to-close, from the grab handle area only (so inner scrolling still works)
   const onTouchStart = (e: React.TouchEvent) => {

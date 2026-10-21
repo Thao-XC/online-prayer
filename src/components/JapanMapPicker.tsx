@@ -36,7 +36,11 @@ import {
   HelpCircle,
   Eye,
   Sliders,
+  X,
+  MoreHorizontal,
 } from 'lucide-react';
+import { Sheet } from './ui/Sheet';
+import { useBackLayer } from '../services/backStack';
 
 interface JapanMapPickerProps {
   onSelectShrine: (shrine: ShrineData) => void;
@@ -72,6 +76,68 @@ const REGION_PRESETS: Record<RegionFilter, { name: string; kanji: string }> = {
   Okinawa: { name: 'Okinawa (Naha)', kanji: '沖縄' },
 };
 
+const REGION_KEYS = Object.keys(REGION_PRESETS) as RegionFilter[];
+const regionEn = (r: RegionFilter) => (r === 'all' ? 'All Japan' : REGION_PRESETS[r].name.split(' ')[0]);
+const inRegion = (s: ShrineData, r: RegionFilter) =>
+  r === 'all' ? true : r === 'Okinawa' ? s.prefecture.toLowerCase().includes('okinawa') : s.region === r;
+const regionCount = (r: RegionFilter) => SHRINES.filter((s) => inRegion(s, r)).length;
+const wishCount = (w: 'all' | WishId) => (w === 'all' ? SHRINES.length : SHRINES.filter((s) => hasWish(s.id, w)).length);
+
+/** A sideways-scrolling chip row that fades at the edges and shows arrows when there is more to see */
+const ScrollRow: React.FC<{ children: React.ReactNode; className?: string; label: string }> = ({ children, className = '', label }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setEdges({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  }, []);
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [update]);
+  const nudge = (dir: number) => ref.current?.scrollBy({ left: dir * 240, behavior: 'smooth' });
+  const mask = `linear-gradient(to right, ${edges.left ? 'transparent 0, #000 48px' : '#000 0'}, ${edges.right ? '#000 calc(100% - 48px), transparent 100%' : '#000 100%'})`;
+  return (
+    <div className={`relative items-center ${className}`} role="group" aria-label={label}>
+      <div
+        ref={ref}
+        onScroll={update}
+        className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 w-full"
+        style={{ maskImage: mask, WebkitMaskImage: mask }}
+      >
+        {children}
+      </div>
+      {edges.left && (
+        <button onClick={() => nudge(-1)} className="absolute left-0 w-7 h-7 rounded-full bg-[#fbf8f1] border border-[#d8cabb] shadow-sm flex items-center justify-center text-[#4a3b2c] cursor-pointer" aria-label="Scroll left">
+          <ChevronRight className="w-4 h-4 rotate-180" />
+        </button>
+      )}
+      {edges.right && (
+        <button onClick={() => nudge(1)} className="absolute right-0 w-7 h-7 rounded-full bg-[#fbf8f1] border border-[#d8cabb] shadow-sm flex items-center justify-center text-[#4a3b2c] cursor-pointer" aria-label="Scroll right">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  );
+};
+
+const ActivePill: React.FC<{ children: React.ReactNode; onRemove: () => void; color?: string }> = ({ children, onRemove, color }) => (
+  <span
+    className="shrink-0 flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full border text-xs font-medium"
+    style={{ color: color ?? '#2c241c', borderColor: color ? `${color}66` : '#cdbda4', background: color ? `${color}14` : '#f3ebdc' }}
+  >
+    {children}
+    <button onClick={onRemove} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-black/5 cursor-pointer" aria-label="Remove filter">
+      <X className="w-3.5 h-3.5" />
+    </button>
+  </span>
+);
+
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 5;
 const clampZoom = (z: number) => Math.min(Math.max(Number(z.toFixed(2)), MIN_ZOOM), MAX_ZOOM);
@@ -88,6 +154,9 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
   const [typeFilter, setTypeFilter] = useState<'all' | ShrineType>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
   const [wishFilter, setWishFilter] = useState<'all' | WishId>('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const activeFilterCount = (typeFilter !== 'all' ? 1 : 0) + (regionFilter !== 'all' ? 1 : 0) + (wishFilter !== 'all' ? 1 : 0);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'map' | 'directory'>('map');
   const [zoomLevel, setZoomLevel] = useState(1.0);
@@ -118,6 +187,11 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
     return () => ro.disconnect();
   }, [viewMode]);
   const touchDistanceRef = useRef<number | null>(null);
+
+  // Esc / back closes these in turn (the filter sheet and popups register themselves)
+  useBackLayer(isMapExpanded, () => setIsMapExpanded(false));
+  useBackLayer(showHelpModal, () => setShowHelpModal(false));
+  useBackLayer(showMore, () => setShowMore(false));
 
   const selectedShrine = useMemo(() => {
     return SHRINES.find((s) => s.id === selectedId) || SHRINES[0];
@@ -236,13 +310,11 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
     soundService.playFootstep();
   };
 
-  const inRegionFilter = (s: ShrineData) =>
-    regionFilter === 'all' ? true : regionFilter === 'Okinawa' ? s.prefecture.toLowerCase().includes('okinawa') : s.region === regionFilter;
 
   const handleSelectWish = (w: 'all' | WishId) => {
     const next = w === wishFilter ? 'all' : w;
     setWishFilter(next);
-    const list = SHRINES.filter((s) => inRegionFilter(s) && (next === 'all' || hasWish(s.id, next)));
+    const list = SHRINES.filter((s) => inRegion(s, regionFilter) && (next === 'all' || hasWish(s.id, next)));
     fitToShrines(list.length === SHRINES.length ? SHRINES : list);
     // keep the details panel on something that matches
     if (next !== 'all' && list.length && !list.some((s) => s.id === selectedId)) setSelectedId(list[0].id);
@@ -514,7 +586,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               <span className="text-xs font-kanji text-[#9a3412] font-semibold border border-[#ea580c]/30 px-2 py-0.5 rounded-full bg-[#ffedd5]/70 hidden sm:inline-block">
                 日本名社寺巡礼
               </span>
-              <span className="text-[11px] font-mono bg-[#fef2f2] text-[#b91c1c] font-bold border border-[#fca5a5] px-2 py-0.5 rounded-full shadow-xs hidden sm:inline">
+              <span className="text-[11px] tabular-nums bg-[#fef2f2] text-[#b91c1c] font-bold border border-[#fca5a5] px-2 py-0.5 rounded-full shadow-xs hidden sm:inline">
                 {SHRINES.length} Sacred Sanctuaries
               </span>
             </div>
@@ -557,14 +629,14 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           {/* Daily Pilgrimage Mission Button */}
           <button
             onClick={onOpenDailyPilgrimage}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fdf5e8] hover:bg-[#faebd4] border border-[#eab308]/60 hover:border-[#ca8a04] text-[#854d0e] text-xs font-medium transition-all shadow-xs cursor-pointer"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fdf5e8] hover:bg-[#faebd4] border border-[#eab308]/60 hover:border-[#ca8a04] text-[#854d0e] text-xs font-medium transition-all shadow-xs cursor-pointer"
           >
             <Flame className="w-4 h-4 text-[#ea580c] fill-[#ea580c] animate-pulse" />
             <span className="hidden sm:inline font-semibold">Daily Missions</span>
-            <span className="bg-[#fef9c3] px-1.5 py-0.5 rounded text-[10px] text-[#a16207] font-mono font-bold border border-[#fde047]">
+            <span className="bg-[#fef9c3] px-1.5 py-0.5 rounded text-[11px] text-[#a16207] tabular-nums font-bold border border-[#fde047]">
               {dailyProgress.completed}/{dailyProgress.total}
             </span>
-            <span className="text-[10px] text-[#ca8a04] font-medium hidden lg:inline">
+            <span className="text-[11px] text-[#ca8a04] font-medium hidden lg:inline">
               • {dailyProgress.streak}d streak
             </span>
           </button>
@@ -572,11 +644,11 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           {/* Goshuin Book Button */}
           <button
             onClick={onOpenGoshuin}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fcf9f2] hover:bg-[#f5ede0] border border-[#d4c3ab] hover:border-[#b89f81] text-[#4a3b2c] text-xs font-medium transition-all shadow-xs cursor-pointer"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fcf9f2] hover:bg-[#f5ede0] border border-[#d4c3ab] hover:border-[#b89f81] text-[#4a3b2c] text-xs font-medium transition-all shadow-xs cursor-pointer"
           >
             <BookOpen className="w-4 h-4 text-[#b45309]" />
             <span className="hidden sm:inline font-medium">Goshuinchō</span>
-            <span className="bg-[#ebdcc7] px-1.5 py-0.5 rounded text-[10px] text-[#78350f] font-mono font-semibold">
+            <span className="bg-[#ebdcc7] px-1.5 py-0.5 rounded text-[11px] text-[#78350f] tabular-nums font-semibold">
               {goshuinCount}/{SHRINES.length}
             </span>
           </button>
@@ -584,11 +656,69 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
           {/* Sound Toggle */}
           <button
             onClick={handleToggleSound}
-            className="p-2 rounded-xl bg-[#fcf9f2] hover:bg-[#f3ebd9] border border-[#d8cabb] text-[#5c4a38] hover:text-[#2c241c] transition-colors cursor-pointer shadow-xs"
+            className="hidden sm:block p-2 rounded-xl bg-[#fcf9f2] hover:bg-[#f3ebd9] border border-[#d8cabb] text-[#5c4a38] hover:text-[#2c241c] transition-colors cursor-pointer shadow-xs"
             aria-label="Toggle Sound"
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-[#9c8b78]" /> : <Volume2 className="w-4 h-4 text-[#b45309]" />}
           </button>
+
+          {/* Phone: missions, book and sound live in one menu */}
+          <div className="relative sm:hidden">
+            <button
+              onClick={() => setShowMore((v) => !v)}
+              className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-[#fcf9f2] border border-[#d8cabb] text-[#4a3b2c] cursor-pointer"
+              aria-label="More"
+              aria-expanded={showMore}
+            >
+              <MoreHorizontal className="w-5 h-5" />
+              {dailyProgress.completed < dailyProgress.total && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#ea580c]" aria-hidden />
+              )}
+            </button>
+            {showMore && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMore(false)} aria-hidden />
+                <div className="absolute right-0 top-12 z-50 w-60 rounded-2xl bg-[#fbf8f1] border border-[#d8cabb] shadow-xl p-1.5 text-sm" role="menu">
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMore(false);
+                      onOpenDailyPilgrimage();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#f3ead7] text-left cursor-pointer"
+                  >
+                    <Flame className="w-4 h-4 text-[#ea580c]" />
+                    <span className="flex-1">Daily missions</span>
+                    <span className="text-xs tabular-nums text-[#854d0e]">
+                      {dailyProgress.completed}/{dailyProgress.total}
+                    </span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMore(false);
+                      onOpenGoshuin();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#f3ead7] text-left cursor-pointer"
+                  >
+                    <BookOpen className="w-4 h-4 text-[#b45309]" />
+                    <span className="flex-1">Pilgrim's book</span>
+                    <span className="text-xs tabular-nums text-[#78350f]">
+                      {goshuinCount}/{SHRINES.length}
+                    </span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={handleToggleSound}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#f3ead7] text-left cursor-pointer"
+                  >
+                    {isMuted ? <VolumeX className="w-4 h-4 text-[#6d5b49]" /> : <Volume2 className="w-4 h-4 text-[#b45309]" />}
+                    <span className="flex-1">Sound {isMuted ? 'off' : 'on'}</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -608,142 +738,165 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               : 'lg:col-span-12'
           } p-3 sm:p-4 flex flex-col justify-between overflow-hidden relative transition-all duration-300 min-h-0`}
         >
-          {/* Top Control Bar: Search, Type Filter, Region Jump Pills & Fullscreen Toggle */}
+          {/* Top Control Bar: search, filters (chip rows on PC, one Filters sheet on phone), full-map toggle */}
           <div className="space-y-2 mb-2 shrink-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               {/* Search input */}
-              <div className="relative flex-1 min-w-[200px] max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8c7a67]" />
+              <div className="relative flex-1 min-w-0 md:max-w-md">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#6d5b49]" />
                 <input
                   type="text"
-                  placeholder="Search shrines, temples, regions, blessings..."
+                  placeholder="Search places, wishes, kami…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#fdfbf7] border border-[#d8cabb] rounded-xl pl-9 pr-7 py-1.5 text-xs text-[#2c241c] placeholder-[#9c8a77] focus:outline-none focus:border-[#b45309] focus:ring-1 focus:ring-[#b45309]/30 shadow-xs"
+                  className="w-full bg-[#fdfbf7] border border-[#d8cabb] rounded-xl pl-9 pr-8 py-2 text-sm text-[#2c241c] placeholder-[#8c7a67] focus:outline-none focus:border-[#b45309] focus:ring-1 focus:ring-[#b45309]/30 shadow-xs"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8c7a67] hover:text-[#2c241c]"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full text-[#6d5b49] hover:text-[#2c241c] hover:bg-[#efe5d3] cursor-pointer"
+                    aria-label="Clear search"
                   >
-                    ×
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
-              {/* Shinto vs Buddhist Filter */}
-              <div className="flex items-center gap-1.5">
+              {/* Shinto vs Buddhist (PC) */}
+              <div className="hidden md:flex items-center gap-1.5 ml-auto">
                 {(['all', 'shrine', 'temple'] as const).map((filter) => (
                   <button
                     key={filter}
                     onClick={() => setTypeFilter(filter)}
+                    aria-pressed={typeFilter === filter}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                       typeFilter === filter
                         ? 'bg-[#b91c1c] text-white font-bold shadow-sm'
-                        : 'bg-[#fcf9f2] border border-[#d8cabb] text-[#63503d] hover:text-[#2c241c] hover:bg-[#f3ead7]'
+                        : 'bg-[#fcf9f2] border border-[#d8cabb] text-[#5a4837] hover:text-[#2c241c] hover:bg-[#f3ead7]'
                     }`}
                   >
-                    {filter === 'all'
-                      ? `All (${SHRINES.length})`
-                      : filter === 'shrine'
-                      ? '⛩️ Shrines'
-                      : '🏯 Temples'}
+                    {filter === 'all' ? `All (${SHRINES.length})` : filter === 'shrine' ? '⛩️ Shrines' : '🏯 Temples'}
                   </button>
                 ))}
-
-                {/* Map Fullscreen / Expand Width Button */}
-                {viewMode === 'map' && (
-                  <button
-                    onClick={() => setIsMapExpanded((prev) => !prev)}
-                    className={`p-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer flex items-center gap-1 shadow-xs ${
-                      isMapExpanded
-                        ? 'bg-[#b45309] border-[#b45309] text-white'
-                        : 'bg-[#fcf9f2] border-[#d8cabb] text-[#63503d] hover:text-[#2c241c] hover:bg-[#f3ead7]'
-                    }`}
-                    title={isMapExpanded ? 'Collapse Map View (F)' : 'Expand Map Fullscreen (F)'}
-                  >
-                    {isMapExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                    <span className="hidden sm:inline text-[11px]">
-                      {isMapExpanded ? 'Split' : 'Full Map'}
-                    </span>
-                  </button>
-                )}
               </div>
+
+              {/* Filters button (phone) */}
+              <button
+                onClick={() => setShowFilters(true)}
+                className={`md:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-semibold cursor-pointer transition-colors ${
+                  activeFilterCount
+                    ? 'bg-[#2c241c] border-[#2c241c] text-[#fef3c7]'
+                    : 'bg-[#fcf9f2] border-[#d8cabb] text-[#4a3b2c]'
+                }`}
+                aria-label={`Filters${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
+              >
+                <Sliders className="w-4 h-4" />
+                <span>Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="min-w-5 h-5 px-1 rounded-full bg-[#b91c1c] text-white text-[11px] flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Map Fullscreen / Expand Width Button */}
+              {viewMode === 'map' && (
+                <button
+                  onClick={() => setIsMapExpanded((prev) => !prev)}
+                  className={`shrink-0 p-2 md:p-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer flex items-center gap-1 shadow-xs ${
+                    isMapExpanded
+                      ? 'bg-[#b45309] border-[#b45309] text-white'
+                      : 'bg-[#fcf9f2] border-[#d8cabb] text-[#5a4837] hover:text-[#2c241c] hover:bg-[#f3ead7]'
+                  }`}
+                  title={isMapExpanded ? 'Back to split view (F or Esc)' : 'Full map (F)'}
+                  aria-label={isMapExpanded ? 'Back to split view' : 'Full map'}
+                >
+                  {isMapExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  <span className="hidden lg:inline text-[11px]">{isMapExpanded ? 'Split' : 'Full Map'}</span>
+                </button>
+              )}
             </div>
 
-            {/* Region Jump Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-              <span className="text-[11px] font-semibold text-[#6e5b47] flex items-center gap-1 shrink-0">
-                <Compass className="w-3.5 h-3.5 text-[#b45309]" /> Region:
+            {/* Region chips (PC) */}
+            <ScrollRow className="hidden md:flex" label="Filter by region">
+              <span className="text-xs font-semibold text-[#5a4837] flex items-center gap-1 shrink-0 pr-0.5">
+                <Compass className="w-3.5 h-3.5 text-[#b45309]" /> Region
               </span>
-              {(Object.keys(REGION_PRESETS) as RegionFilter[]).map((reg) => {
-                const preset = REGION_PRESETS[reg];
-                const count =
-                  reg === 'all'
-                    ? SHRINES.length
-                    : reg === 'Okinawa'
-                    ? SHRINES.filter((s) => s.prefecture.includes('Okinawa') || s.id === 'naminoue-gu').length
-                    : SHRINES.filter((s) => s.region === reg).length;
+              {REGION_KEYS.map((reg) => {
                 const isSelected = regionFilter === reg;
-
                 return (
                   <button
                     key={reg}
                     onClick={() => handleSelectRegionPreset(reg)}
-                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all cursor-pointer flex items-center gap-1 border ${
+                    aria-pressed={isSelected}
+                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all cursor-pointer flex items-center gap-1.5 border text-xs ${
                       isSelected
-                        ? 'bg-[#2c241c] border-[#2c241c] text-[#fef3c7] font-bold shadow-xs'
-                        : 'bg-[#fcf9f2] border-[#ded2be] text-[#5a4837] hover:text-[#2c241c] hover:border-[#b89f81] hover:bg-[#f5ede0]'
+                        ? 'bg-[#2c241c] border-[#2c241c] text-[#fef3c7] font-semibold shadow-xs'
+                        : 'bg-[#fcf9f2] border-[#ded2be] text-[#4a3b2c] hover:text-[#2c241c] hover:border-[#b89f81] hover:bg-[#f5ede0]'
                     }`}
                   >
-                    <span>{preset.kanji}</span>
-                    <span className="hidden sm:inline font-sans">{preset.name.split(' ')[0]}</span>
-                    <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                    <span>{regionEn(reg)}</span>
+                    <span className="font-kanji opacity-70">{REGION_PRESETS[reg].kanji}</span>
+                    <span className="text-[11px] opacity-70 tabular-nums">{regionCount(reg)}</span>
                   </button>
                 );
               })}
-            </div>
+            </ScrollRow>
 
-            {/* Wish Pills: what each place is famous for */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs" role="group" aria-label="Filter by wish">
-              <span className="text-[11px] font-semibold text-[#6e5b47] flex items-center gap-1 shrink-0">
-                <Heart className="w-3.5 h-3.5 text-[#b91c1c]" /> Wish:
+            {/* Wish chips (PC): what each place is famous for */}
+            <ScrollRow className="hidden md:flex" label="Filter by wish">
+              <span className="text-xs font-semibold text-[#5a4837] flex items-center gap-1 shrink-0 pr-0.5">
+                <Heart className="w-3.5 h-3.5 text-[#b91c1c]" /> Wish
               </span>
               {(['all', ...WISH_ORDER] as const).map((w) => {
                 const isSelected = wishFilter === w;
                 const c = w === 'all' ? null : WISHES[w];
-                const count = w === 'all' ? SHRINES.length : SHRINES.filter((s) => hasWish(s.id, w)).length;
                 return (
                   <button
                     key={w}
                     onClick={() => handleSelectWish(w)}
                     aria-pressed={isSelected}
                     title={c ? `${c.jp} (${c.reading}): ${c.en}` : 'Any wish'}
-                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all cursor-pointer flex items-center gap-1 border ${
-                      isSelected ? 'text-white font-bold shadow-xs' : 'bg-[#fcf9f2] border-[#ded2be] text-[#5a4837] hover:text-[#2c241c] hover:border-[#b89f81] hover:bg-[#f5ede0]'
+                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all cursor-pointer flex items-center gap-1.5 border text-xs ${
+                      isSelected ? 'text-white font-semibold shadow-xs' : 'bg-[#fcf9f2] border-[#ded2be] text-[#4a3b2c] hover:text-[#2c241c] hover:border-[#b89f81] hover:bg-[#f5ede0]'
                     }`}
                     style={isSelected ? { background: c?.color ?? '#2c241c', borderColor: c?.color ?? '#2c241c' } : undefined}
                   >
-                    {c ? (
-                      <>
-                        <span aria-hidden>{c.emoji}</span>
-                        <span className="font-kanji">{c.jp.split('・')[0]}</span>
-                        <span className="hidden sm:inline font-sans">{c.short}</span>
-                      </>
-                    ) : (
-                      <span>Any</span>
-                    )}
-                    <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                    {c && <span aria-hidden>{c.emoji}</span>}
+                    <span>{c ? c.short : 'Any'}</span>
+                    {c && <span className="font-kanji opacity-70">{c.jp.split('・')[0]}</span>}
+                    <span className="text-[11px] opacity-70 tabular-nums">{wishCount(w)}</span>
                   </button>
                 );
               })}
-            </div>
+            </ScrollRow>
+
+            {/* Active filters (phone): one line, tap × to remove */}
+            {activeFilterCount > 0 && (
+              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
+                {typeFilter !== 'all' && (
+                  <ActivePill onRemove={() => setTypeFilter('all')}>{typeFilter === 'shrine' ? '⛩️ Shrines' : '🏯 Temples'}</ActivePill>
+                )}
+                {regionFilter !== 'all' && (
+                  <ActivePill onRemove={() => handleSelectRegionPreset('all')}>
+                    🧭 {regionEn(regionFilter)}
+                  </ActivePill>
+                )}
+                {wishFilter !== 'all' && (
+                  <ActivePill color={WISHES[wishFilter].color} onRemove={() => handleSelectWish('all')}>
+                    {WISHES[wishFilter].emoji} {WISHES[wishFilter].en}
+                  </ActivePill>
+                )}
+                <span className="text-xs text-[#5a4837] shrink-0 pl-1">{filteredShrines.length} places</span>
+              </div>
+            )}
+
             {wishFilter !== 'all' && (
-              <p className="text-[11px] text-[#6d5b49] leading-snug -mt-0.5 truncate sm:whitespace-normal">
+              <p className="hidden md:block text-xs text-[#5a4837] leading-snug">
                 <span className="font-semibold" style={{ color: WISHES[wishFilter].color }}>
                   {WISHES[wishFilter].emoji} {WISHES[wishFilter].en}
-                </span>
-                 are what these places are famous for.<span className="hidden sm:inline"> You can still pray for anything at any shrine or temple.</span>
+                </span>{' '}
+                is what these places are famous for. You can still pray for anything at any shrine or temple.
               </p>
             )}
           </div>
@@ -1013,7 +1166,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                           }`}
                         >
                           <span className="font-kanji font-bold">{shrine.kanjiName.split('（')[0]}</span>
-                          <span className={`font-sans hidden sm:inline text-[10px] ${isSelected ? 'text-[#e7d6b8]' : 'text-[#806c57]'}`}>
+                          <span className={`font-sans hidden sm:inline text-[11px] ${isSelected ? 'text-[#e7d6b8]' : 'text-[#806c57]'}`}>
                             {shrine.name.split('(')[0]}
                           </span>
                         </div>
@@ -1070,7 +1223,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                         {/* Top Metadata Badges */}
                         <div className="flex items-center justify-between gap-2">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold border flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded text-[11px] font-semibold border flex items-center gap-1 ${
                               shrine.type === 'shrine'
                                 ? 'bg-[#fef2f2] border-[#fca5a5] text-[#b91c1c]'
                                 : 'bg-[#fffbeb] border-[#fde68a] text-[#b45309]'
@@ -1079,7 +1232,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                             <span>{shrine.type === 'shrine' ? '⛩️ Shinto Shrine' : '🏯 Buddhist Temple'}</span>
                           </span>
 
-                          <span className="text-[10px] text-[#715f4e] font-mono">
+                          <span className="text-[11px] text-[#715f4e] tabular-nums">
                             {shrine.region} • {shrine.prefecture}
                           </span>
                         </div>
@@ -1110,7 +1263,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                               <span
                                 key={wish}
                                 title={c.en}
-                                className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border whitespace-nowrap"
+                                className="px-1.5 py-0.5 rounded-md text-[11px] font-medium border whitespace-nowrap"
                                 style={{ color: on ? '#fff' : c.color, background: on ? c.color : `${c.color}14`, borderColor: `${c.color}55` }}
                               >
                                 {c.emoji} {c.short}
@@ -1157,7 +1310,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                 >
                   <span>{shrine.type === 'shrine' ? '⛩️' : '🏯'}</span>
                   <span className="font-kanji">{shrine.kanjiName.split('（')[0]}</span>
-                  <span className="text-[10px] opacity-75 font-mono">({shrine.region})</span>
+                  <span className="text-[11px] opacity-75 tabular-nums">({shrine.region})</span>
                 </button>
               );
             })}
@@ -1186,7 +1339,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                   <span>{selectedShrine.type === 'shrine' ? '⛩️ Shinto Shrine (神社)' : '🏯 Buddhist Temple (寺院)'}</span>
                 </span>
 
-                <span className="text-xs font-mono font-medium text-[#fef08a] bg-black/30 px-2 py-0.5 rounded-md border border-white/20">
+                <span className="text-xs tabular-nums font-medium text-[#fef08a] bg-black/30 px-2 py-0.5 rounded-md border border-white/20">
                   Est. {selectedShrine.establishedYear}
                 </span>
               </div>
@@ -1211,7 +1364,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
             {/* Sacred Deity / Buddha & Blessings in Warm Parchment Cards */}
             <div className="grid grid-cols-1 gap-2.5">
               <div className="p-3 rounded-xl bg-[#f5ece0] border border-[#d8cabb]">
-                <div className="text-[10px] text-[#9a3412] uppercase tracking-widest font-mono font-bold flex items-center gap-1">
+                <div className="text-[11px] text-[#9a3412] uppercase tracking-widest tabular-nums font-bold flex items-center gap-1">
                   <Landmark className="w-3 h-3 text-[#b45309]" />
                   {selectedShrine.type === 'shrine' ? 'Enshrined Kami (御祭神)' : 'Principal Buddha (本尊)'}
                 </div>
@@ -1221,30 +1374,26 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
               </div>
 
               <div className="p-3 rounded-xl bg-[#f5ece0] border border-[#d8cabb]">
-                <div className="text-[10px] text-[#b91c1c] uppercase tracking-widest font-mono font-bold flex items-center gap-1">
-                  <Heart className="w-3 h-3 text-[#b91c1c]" />
-                  Primary Divine Blessing (ご利益)
+                <div className="text-xs text-[#9a3412] font-semibold flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5 text-[#b91c1c]" />
+                  Famous for <span className="font-kanji font-normal text-[#6d5b49]">ご利益</span>
                 </div>
-                <div className="text-xs sm:text-sm font-semibold text-[#7c2d12] mt-1">
-                  {selectedShrine.primaryBlessing}
-                </div>
-                <ul className="mt-2.5 space-y-2">
+                <ul className="mt-2 space-y-2.5">
                   {wishesOf(selectedShrine.id).map(({ wish, why }) => {
                     const c = WISHES[wish];
                     return (
-                      <li key={wish} className="flex gap-2 items-start">
-                        <span
-                          className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-white whitespace-nowrap"
-                          style={{ background: c.color }}
-                        >
-                          {c.emoji} <span className="font-kanji">{c.jp}</span>
-                        </span>
-                        <span className="text-[11px] text-[#4a3b2b] leading-snug">{why}</span>
+                      <li key={wish}>
+                        <div className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: c.color }}>
+                          <span aria-hidden>{c.emoji}</span>
+                          <span>{c.en}</span>
+                          <span className="font-kanji font-normal text-xs opacity-80">{c.jp}</span>
+                        </div>
+                        <p className="text-xs text-[#3d3124] leading-relaxed mt-0.5">{why}</p>
                       </li>
                     );
                   })}
                 </ul>
-                <p className="mt-2 text-[10px] text-[#8a7762] italic">Known for these, but every kami and Buddha hears every sincere prayer.</p>
+                <p className="mt-2.5 text-xs text-[#6d5b49] italic">You can pray for anything here. Every kami and Buddha hears every sincere prayer.</p>
               </div>
             </div>
 
@@ -1282,7 +1431,7 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
                   <div className="text-xs font-bold text-[#2c241c]">
                     Sacred Goshuin Stamp Seal
                   </div>
-                  <div className="text-[10px] text-[#715f4e] font-kanji">
+                  <div className="text-[11px] text-[#715f4e] font-kanji">
                     {selectedShrine.goshuinStamp.templeSealName}
                   </div>
                 </div>
@@ -1312,6 +1461,96 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
       </main>
 
       {/* Quick Navigation Help Modal */}
+      {showFilters && (
+        <Sheet onClose={() => setShowFilters(false)} size="md" label="Filters" className="px-5 pt-1 sm:pt-6">
+          <h2 className="text-lg font-semibold text-[#2c241c] pr-10">Filters</h2>
+
+          <section className="mt-4">
+            <h3 className="text-sm font-semibold text-[#4a3b2c] mb-2">Type</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {(['all', 'shrine', 'temple'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setTypeFilter(f)}
+                  aria-pressed={typeFilter === f}
+                  className={`py-2.5 rounded-xl border text-sm cursor-pointer ${
+                    typeFilter === f ? 'bg-[#b91c1c] border-[#b91c1c] text-white font-semibold' : 'bg-[#fffcf6] border-[#e3d6c0] text-[#3d3124]'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'shrine' ? '⛩️ Shrines' : '🏯 Temples'}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <h3 className="text-sm font-semibold text-[#4a3b2c]">Wish</h3>
+            <p className="text-xs text-[#6d5b49] mb-2">What each place is famous for. You can pray for anything anywhere.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['all', ...WISH_ORDER] as const).map((w) => {
+                const c = w === 'all' ? null : WISHES[w];
+                const on = wishFilter === w;
+                return (
+                  <button
+                    key={w}
+                    onClick={() => handleSelectWish(w)}
+                    aria-pressed={on}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left cursor-pointer ${on ? 'text-white' : 'bg-[#fffcf6] border-[#e3d6c0] text-[#3d3124]'}`}
+                    style={on ? { background: c?.color ?? '#2c241c', borderColor: c?.color ?? '#2c241c' } : undefined}
+                  >
+                    <span aria-hidden className="text-base">{c ? c.emoji : '✨'}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium leading-tight">{c ? c.en : 'Any wish'}</span>
+                      {c && <span className={`block font-kanji text-[11px] ${on ? 'text-white/85' : 'text-[#6d5b49]'}`}>{c.jp}</span>}
+                    </span>
+                    <span className={`text-xs tabular-nums ${on ? 'text-white/85' : 'text-[#6d5b49]'}`}>{wishCount(w)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <h3 className="text-sm font-semibold text-[#4a3b2c] mb-2">Region</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {REGION_KEYS.map((r) => {
+                const on = regionFilter === r;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => handleSelectRegionPreset(r)}
+                    aria-pressed={on}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left cursor-pointer ${
+                      on ? 'bg-[#2c241c] border-[#2c241c] text-[#fef3c7]' : 'bg-[#fffcf6] border-[#e3d6c0] text-[#3d3124]'
+                    }`}
+                  >
+                    <span className="flex-1 text-sm font-medium">{regionEn(r)}</span>
+                    <span className={`font-kanji text-xs ${on ? 'opacity-85' : 'text-[#6d5b49]'}`}>{REGION_PRESETS[r].kanji}</span>
+                    <span className={`text-xs tabular-nums ${on ? 'opacity-85' : 'text-[#6d5b49]'}`}>{regionCount(r)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="sticky bottom-0 -mx-5 mt-5 px-5 pt-3 pb-1 bg-[#fbf7ef] border-t border-[#e6d9c4] flex gap-2">
+            <button
+              onClick={() => {
+                setTypeFilter('all');
+                handleSelectRegionPreset('all');
+                setWishFilter('all');
+              }}
+              className="px-4 py-3 rounded-xl bg-[#ece2cf] text-[#2c241c] text-sm font-semibold cursor-pointer"
+            >
+              Clear
+            </button>
+            <button onClick={() => setShowFilters(false)} className="flex-1 py-3 rounded-xl bg-[#b91c1c] text-white text-sm font-semibold cursor-pointer">
+              Show {filteredShrines.length} place{filteredShrines.length === 1 ? '' : 's'}
+            </button>
+          </div>
+        </Sheet>
+      )}
+
       {showHelpModal && (
         <div
           onClick={() => setShowHelpModal(false)}
@@ -1335,27 +1574,27 @@ export const JapanMapPicker: React.FC<JapanMapPickerProps> = ({
 
             <div className="space-y-3 text-xs text-[#4a3b2b]">
               <div className="flex items-start gap-2.5">
-                <span className="px-2 py-0.5 rounded bg-[#eee3cf] font-mono font-bold shrink-0">Scroll Wheel</span>
+                <span className="px-2 py-0.5 rounded bg-[#eee3cf] tabular-nums font-bold shrink-0">Scroll Wheel</span>
                 <span>Zoom smoothly in and out directly towards your cursor.</span>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="px-2 py-0.5 rounded bg-[#eee3cf] font-mono font-bold shrink-0">Click & Drag</span>
+                <span className="px-2 py-0.5 rounded bg-[#eee3cf] tabular-nums font-bold shrink-0">Click & Drag</span>
                 <span>Click and hold anywhere on the map to pan around Japan.</span>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="px-2 py-0.5 rounded bg-[#eee3cf] font-mono font-bold shrink-0">Double Click</span>
+                <span className="px-2 py-0.5 rounded bg-[#eee3cf] tabular-nums font-bold shrink-0">Double Click</span>
                 <span>Double-click anywhere to zoom in directly onto that region.</span>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="px-2 py-0.5 rounded bg-[#eee3cf] font-mono font-bold shrink-0">+ / - / 0</span>
+                <span className="px-2 py-0.5 rounded bg-[#eee3cf] tabular-nums font-bold shrink-0">+ / - / 0</span>
                 <span>Keyboard keys to zoom in, zoom out, or reset view.</span>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="px-2 py-0.5 rounded bg-[#eee3cf] font-mono font-bold shrink-0">Arrow Keys</span>
+                <span className="px-2 py-0.5 rounded bg-[#eee3cf] tabular-nums font-bold shrink-0">Arrow Keys</span>
                 <span>Use keyboard arrows to pan the map without dragging.</span>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="px-2 py-0.5 rounded bg-[#eee3cf] font-mono font-bold shrink-0">F Key / Full Map</span>
+                <span className="px-2 py-0.5 rounded bg-[#eee3cf] tabular-nums font-bold shrink-0">F Key / Full Map</span>
                 <span>Expand map across full screen width for spacious exploration.</span>
               </div>
             </div>
