@@ -4,8 +4,10 @@ import { SHRINES } from '../data/shrinesData';
 import { GoshuinEntry, ShrineData } from '../types/shrine';
 import { soundService } from '../services/soundService';
 import { pilgrimService } from '../services/pilgrimService';
-import { MONTHLY_SEAL, LEGEND_INDEX, OMAMORI } from '../data/pilgrimData';
-import { OmamoriPouch } from './OmamoriModal';
+import { MONTHLY_SEAL, LEGEND_INDEX } from '../data/pilgrimData';
+import { OmamoriArt } from './OmamoriArt';
+import { designFor, SHRINE_OMAMORI } from '../data/omamoriData';
+import { WISHES } from '../data/wishesData';
 import { useLuck } from './LuckAndLegends';
 import type { StoryCard } from '../three/encounters/types';
 import confetti from 'canvas-confetti';
@@ -198,12 +200,12 @@ export const GoshuinBookModal: React.FC<GoshuinBookModalProps> = ({ currentShrin
         <div className="flex-1">
           {pilgrim.pouch.length === 0 ? (
             <div className="text-center py-10 text-sm text-[#6d5b49]">
-              <div className="flex justify-center gap-2 mb-4 opacity-60">
-                {(Object.keys(OMAMORI) as (keyof typeof OMAMORI)[]).map((k) => (
-                  <OmamoriPouch key={k} kind={k} size="sm" />
+              <div className="flex justify-center items-end gap-2 mb-4 opacity-70">
+                {['fushimi-inari-0', 'izumo-taisha-0', 'nikko-tosho-gu-0', 'kotohira-gu-0', 'naminoue-gu-0'].map((id) => (
+                  <OmamoriArt key={id} design={designFor({ designId: id })} size={36} />
                 ))}
               </div>
-              Your pouch is empty. Receive an omamori at any shrine's amulet stall (the Omamori button), and tie its twin cord to the sacred tree.
+              Your pouch is empty. Every shrine and temple has its own {Object.values(SHRINE_OMAMORI).flat().length > 0 ? '5–6' : ''} omamori. Receive one at the amulet stall (the Omamori button) and tie its twin cord to the sacred tree.
             </div>
           ) : (
             <div className="grid grid-cols-2 min-[480px]:grid-cols-3 sm:grid-cols-4 gap-3">
@@ -211,16 +213,17 @@ export const GoshuinBookModal: React.FC<GoshuinBookModalProps> = ({ currentShrin
                 const ageDays = (Date.now() - o.at) / 86400000;
                 return (
                   <div key={o.id} className="flex flex-col items-center text-center gap-1.5 p-3 rounded-xl bg-[#fffcf6] border border-[#e3d6c0]">
-                    <div className="pt-2">
-                      <OmamoriPouch kind={o.kind} shrineKanji={o.kanjiName.split('（')[0]} />
+                    <div className="pt-2 omamori-swing">
+                      <OmamoriArt design={designFor(o)} size={52} />
                     </div>
-                    <div className="font-kanji text-sm font-semibold" style={{ color: OMAMORI[o.kind].color }}>
-                      {OMAMORI[o.kind].jp}
+                    <div className="font-kanji text-sm font-semibold text-[#2c241c]">{designFor(o).jp}</div>
+                    <div className="text-[11px]" style={{ color: WISHES[designFor(o).wish].color }}>
+                      {WISHES[designFor(o).wish].emoji} {designFor(o).name}
                     </div>
                     <div className="text-[11px] text-[#4a3c2e] font-kanji leading-tight">{o.kanjiName.split('（')[0]}</div>
                     {o.forWhom && <div className="text-[11px] text-[#6d5b49]">for {o.forWhom}</div>}
-                    <div className="text-[10px] text-[#8a7762] font-mono">{o.date}</div>
-                    {ageDays > 365 && <div className="text-[10px] text-[#b45309]">A year has passed: time to return it</div>}
+                    <div className="text-[11px] text-[#6d5b49] tabular-nums">{o.date}</div>
+                    {ageDays > 365 && <div className="text-[11px] text-[#b45309]">A year has passed: time to return it</div>}
                   </div>
                 );
               })}
