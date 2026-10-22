@@ -37,6 +37,8 @@ export interface LayoutResult {
   secrets?: SecretDef[];
   /** real-world manners that cost luck when ignored */
   etiquette?: Etiquette;
+  /** where temizu happens when it isn't a standard basin (Ise: the Isuzu River at Mitarashi) */
+  temizuSite?: { kind: 'river'; at: [number, number]; face: [number, number]; waterY: number };
   /** objects that only appear at night (shown/hidden with the time of day) */
   nightObjects?: THREE.Object3D[];
 }

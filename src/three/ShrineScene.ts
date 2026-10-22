@@ -11,6 +11,7 @@ import { LAYOUTS } from './layouts';
 import type { GroundFn, LayoutCtx, LayoutResult, ParticleKind, SecretDef, Etiquette } from './layouts/types';
 import type { EncounterDef, EncounterEvent, EncounterRuntime, StoryCard, EncounterApi } from './encounters/types';
 import type { ShrineSpot } from '../types/shrine';
+import { TemizuRitual, type TemizuState, type TemizuSite } from './temizu/TemizuRitual';
 
 export interface SceneCallbacks {
   onNearSpot?: (spotId: string | null, spotName: string | null, spotType: string | null) => void;
@@ -83,6 +84,8 @@ export class ShrineScene {
   private blindwalk: { def: SecretDef; t: number } | null = null;
   private etiquette: Etiquette = {};
   private nightObjects: THREE.Object3D[] = [];
+  private temizuSite: LayoutResult['temizuSite'] = undefined;
+  private temizu: TemizuRitual | null = null;
   private manners = { centreT: 0, centreCount: 0, centreCool: 0, runT: 0, runCount: 0, runCool: 0, forbidCool: 0, forbidCount: 0, bowedAtGate: false, gateWarned: false, gateHinted: false, lastBow: -99, lookBackT: 0, lookBackDone: false };
   private elapsed = 0;
   private bowAnim = 0;
@@ -327,6 +330,7 @@ export class ShrineScene {
     this.secrets = res.secrets ?? [];
     this.etiquette = res.etiquette ?? {};
     this.nightObjects = res.nightObjects ?? [];
+    this.temizuSite = res.temizuSite;
     this.walkable = res.walkable ?? null;
     this.bounds = res.bounds;
     this.fogMul = res.fog ?? 1;
@@ -846,6 +850,17 @@ export class ShrineScene {
 
     this.elapsed += delta;
     this.updateFade(delta);
+    if (this.temizu) {
+      this.temizu.update(delta);
+      this.updateParticles(delta);
+      if (this.nature) {
+        const t = now / 1000;
+        this.nature.animated.forEach((a) => a.update(t));
+      }
+      this.renderer.render(this.scene, this.camera);
+      this.animFrameId = requestAnimationFrame(this.animate);
+      return;
+    }
     this.updatePlayerMovement(delta);
     this.updateEncounter(delta);
     this.updateManners(delta);
@@ -1281,6 +1296,89 @@ export class ShrineScene {
     return true;
   }
 
+  /* ================================================================== */
+  /* Temizu: first-person purification at this shrine's own basin        */
+  /* ================================================================== */
+  /** Where to stand and what to face, worked out from this shrine's real basin (or Ise's river) */
+  private findTemizuSite(): TemizuSite | null {
+    const spot = this.spots.find((s) => s.type === 'temizuya');
+    if (this.temizuSite?.kind === 'river') {
+      const t = this.temizuSite;
+      const dx = t.face[0] - t.at[0], dz = t.face[1] - t.at[1];
+      const l = Math.hypot(dx, dz) || 1;
+      const g = this.ground(t.at[0], t.at[1]);
+      return { kind: 'river', eye: new THREE.Vector3(t.at[0], g + 1.55, t.at[1]), yaw: Math.atan2(-dx / l, -dz / l), waterY: t.waterY, groundY: g };
+    }
+    const obj = this.scene.getObjectByName('temizuya');
+    if (!obj) return null;
+    obj.updateMatrixWorld(true);
+    const centre = obj.getWorldPosition(new THREE.Vector3());
+    const waterY = centre.y + ((obj.userData.temizu?.waterY as number) ?? 1.08);
+    const localZ = new THREE.Vector3(0, 0, 1).applyQuaternion(obj.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
+    // stand on the long side of the basin that faces the approach
+    const from = spot ? new THREE.Vector3(spot.position[0] - centre.x, 0, spot.position[2] - centre.z) : localZ.clone();
+    const stand = localZ.clone().multiplyScalar(Math.sign(from.dot(localZ)) || 1);
+    const eye = centre.clone().addScaledVector(stand, 0.95);
+    eye.y = waterY + 0.66;
+    const yaw = Math.atan2(stand.x, stand.z);
+    // the resting ladle on the visitor's right is the one we pick up
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    let rack: THREE.Object3D | null = null;
+    let best = -Infinity;
+    obj.traverse((c) => {
+      if (c.name !== 'hishaku') return;
+      const d = c.getWorldPosition(new THREE.Vector3()).sub(centre).dot(right);
+      if (d > best) {
+        best = d;
+        rack = c;
+      }
+    });
+    return { kind: 'basin', eye, yaw, waterY, groundY: this.ground(eye.x, eye.z), rackLadle: rack };
+  }
+
+  public get hasTemizu() {
+    return !!this.findTemizuSite();
+  }
+
+  /** Begin the purification. `onState` is called as steps advance. Returns false if this site has no basin. */
+  public startTemizu(onState: (s: TemizuState) => void) {
+    if (this.temizu) return true;
+    if (this.enc) this.abortEncounter();
+    const site = this.findTemizuSite();
+    if (!site) return false;
+    this.isCinematicMode = false;
+    this.callbacks.onNearSpot?.(null, null, null);
+    const far = this.camera.position.distanceTo(site.eye) > 8;
+    const begin = () => {
+      if (far) this.camera.position.copy(site.eye).add(new THREE.Vector3(Math.sin(site.yaw) * 1.6, 0.6, Math.cos(site.yaw) * 1.6));
+      this.temizu = new TemizuRitual(this.scene, this.camera, site, onState, (d) => {
+        if (!this.fade) (this.fadeMesh.material as THREE.MeshBasicMaterial).opacity = d;
+      });
+      if (far) this.fadeTo(0x000000, 0, 0.6);
+    };
+    if (far) this.fadeTo(0x000000, 1, 0.35, begin);
+    else begin();
+    return true;
+  }
+
+  public setTemizuHolding(on: boolean) {
+    if (this.temizu) this.temizu.holding = on;
+  }
+
+  /** Leave the purification and step back from the basin */
+  public endTemizu() {
+    if (!this.temizu) return;
+    const site = this.temizu.site;
+    this.temizu.dispose();
+    this.temizu = null;
+    // stand where you were, facing the water
+    const bx = site.eye.x + Math.sin(site.yaw) * 0.6, bz = site.eye.z + Math.cos(site.yaw) * 0.6;
+    this.playerPosition.set(bx, 1.7 + this.ground(bx, bz), bz);
+    this.playerRotationY = site.yaw;
+    this.playerPitch = -0.15;
+    (this.fadeMesh.material as THREE.MeshBasicMaterial).opacity = 0;
+  }
+
   /** used when teleporting away mid-encounter */
   private abortEncounter() {
     this.fade = null;
@@ -1465,6 +1563,8 @@ export class ShrineScene {
       cancelAnimationFrame(this.animFrameId);
     }
 
+    this.temizu?.dispose();
+    this.temizu = null;
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('resize', this.onWindowResize);

@@ -170,6 +170,7 @@ export const iseJingu: Layout = (ctx) => {
       centerLines: [[0, 96, 0, 79], [0, 53, 0, 28], [0, 0, 0, -33]],
       forbidden: [{ test: (x, z) => z < -43 && Math.abs(x) < 20, reason: 'Beyond the white curtain only priests may enter. Visitors pray at the gate.', penalty: 4 }],
     },
+    temizuSite: { kind: 'river', at: [-29.8, 16], face: [-34, 16], waterY: -0.6 },
     spawn: { x: 0, z: 94, rotY: 0 },
     bounds: { x0: -34, x1: 30, z0: -44, z1: 98 },
     walkable: (x, z) => (riverA(z) ? Math.abs(x) < 3.2 : true) && !riverB(x, z),
