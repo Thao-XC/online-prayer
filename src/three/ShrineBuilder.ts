@@ -588,6 +588,9 @@ export class ShrineBuilder {
    */
   public buildTemizuya(): THREE.Group {
     const group = new THREE.Group();
+    group.name = 'temizuya';
+    // water surface height and basin size, used by the first-person purification
+    group.userData.temizu = { waterY: 1.08, basinW: 2.2, basinD: 1.4 };
     const w = 4.2;
     const d = 3.2;
     const h = 3.6;
@@ -628,45 +631,63 @@ export class ShrineBuilder {
     roof.castShadow = true;
     group.add(roof);
 
-    // Carved Granite Water Basin (Chōzubachi)
-    const basinGeom = new THREE.BoxGeometry(2.2, 0.9, 1.4);
-    const basin = new THREE.Mesh(basinGeom, this.matGranite);
-    basin.position.set(0, 0.75, 0);
-    basin.castShadow = true;
-    group.add(basin);
+    // Carved granite water basin (chōzubachi): hollow, so you can see and scoop the water
+    const bw = 2.2, bd = 1.4, bh = 0.9, t = 0.16, top = 1.2;
+    const wall = (w: number, d: number, x: number, z: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, d), this.matGranite);
+      m.position.set(x, top - bh / 2, z);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      group.add(m);
+    };
+    wall(bw, t, 0, bd / 2 - t / 2);
+    wall(bw, t, 0, -bd / 2 + t / 2);
+    wall(t, bd - 2 * t, bw / 2 - t / 2, 0);
+    wall(t, bd - 2 * t, -bw / 2 + t / 2, 0);
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(bw - 2 * t, 0.2, bd - 2 * t), this.matGranite);
+    floor.position.set(0, top - bh + 0.1, 0);
+    group.add(floor);
 
-    // Water surface inside basin
-    const waterGeom = new THREE.PlaneGeometry(1.9, 1.1);
-    const water = new THREE.Mesh(waterGeom, this.matWater);
-    water.position.set(0, 1.15, 0);
+    // Water surface inside the basin
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(bw - 2 * t, bd - 2 * t), new THREE.MeshStandardMaterial({ color: 0x3f8f9c, roughness: 0.12, metalness: 0.05, transparent: true, opacity: 0.88 }));
+    water.position.set(0, 1.08, 0);
     water.rotation.x = -Math.PI / 2;
     group.add(water);
 
-    // Bamboo Kakehi (Water spout with running stream)
-    const spoutGeom = new THREE.CylinderGeometry(0.06, 0.06, 1.1, 12);
+    // Bamboo kakehi spout with a thin stream of water
     const spoutMat = new THREE.MeshStandardMaterial({ color: 0x7a8b48, roughness: 0.5 });
-    const spout = new THREE.Mesh(spoutGeom, spoutMat);
-    spout.position.set(0, 1.5, -0.6);
-    spout.rotation.x = 0.6;
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9, 12), spoutMat);
+    spout.position.set(-0.75, 1.48, -0.55);
+    spout.rotation.set(0.35, 0, 0.9);
     group.add(spout);
+    const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.3, 6), new THREE.MeshStandardMaterial({ color: 0xcff4ff, transparent: true, opacity: 0.7 }));
+    stream.position.set(-0.4, 1.24, -0.4);
+    group.add(stream);
 
-    // Wooden Ladle (Hishaku) resting on bamboo rails
-    [-0.4, 0.4].forEach((lx) => {
+    // Bamboo rack across the basin with ladles (hishaku) resting face down, real size
+    const bamboo = new THREE.MeshStandardMaterial({ color: 0x9fae62, roughness: 0.6 });
+    [-0.06, 0.18].forEach((z) => {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, bw - 0.1, 8), bamboo);
+      bar.rotation.z = Math.PI / 2;
+      bar.position.set(0, top + 0.02, z);
+      group.add(bar);
+    });
+    [-0.62, -0.28, 0.28, 0.62].forEach((lx) => {
       const ladleGroup = new THREE.Group();
-      // Bamboo cup
-      const cupGeom = new THREE.CylinderGeometry(0.09, 0.08, 0.12, 12);
-      const cup = new THREE.Mesh(cupGeom, this.matCypress);
-      cup.position.set(0, 0, 0);
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.043, 0.075, 14, 1, true), this.matCypress);
+      (cup.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      cup.rotation.x = Math.PI; // face down
       ladleGroup.add(cup);
-
-      // Long wooden handle
-      const handleGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 8);
-      const handle = new THREE.Mesh(handleGeom, this.matCypress);
-      handle.position.set(0, 0, 0.4);
+      const capTop = new THREE.Mesh(new THREE.CircleGeometry(0.043, 14), this.matCypress);
+      capTop.rotation.x = -Math.PI / 2;
+      capTop.position.y = 0.037;
+      ladleGroup.add(capTop);
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.009, 0.42, 8), this.matCypress);
       handle.rotation.x = Math.PI / 2;
+      handle.position.set(0, 0.0, 0.25);
       ladleGroup.add(handle);
-
-      ladleGroup.position.set(lx, 1.25, 0.1);
+      ladleGroup.position.set(lx, top + 0.075, 0.0);
+      ladleGroup.name = 'hishaku';
       group.add(ladleGroup);
     });
 

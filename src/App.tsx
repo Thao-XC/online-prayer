@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SHRINES, INITIAL_EMA_SAMPLES } from './data/shrinesData';
 import { ShrineData, TimeOfDay, GoshuinEntry, EmaVotive, OmikujiFortune, DailyPilgrimageState, DailyMission } from './types/shrine';
 import { JapanMapPicker } from './components/JapanMapPicker';
 import { ControlDock } from './components/ControlDock';
-import { TemizuyaModal } from './components/TemizuyaModal';
+import { TemizuHud } from './components/TemizuHud';
+import type { TemizuState } from './three/temizu/TemizuRitual';
 import { SaisenWorshipModal } from './components/SaisenWorshipModal';
 import { OmikujiModal } from './components/OmikujiModal';
 import { EmaModal } from './components/EmaModal';
@@ -94,6 +95,9 @@ export default function App() {
   const [storyCard, setStoryCard] = useState<{ card: StoryCard; luck: number; firstTime: boolean } | null>(null);
   const [showLuck, setShowLuck] = useState(false);
   const [inLegend, setInLegend] = useState(false);
+  const [temizu, setTemizu] = useState<TemizuState | null>(null);
+  const [inTemizu, setInTemizu] = useState(false);
+  const temizuDone = useRef(false);
   // per-visit manners
   const visit = useRef({ purified: false, worshipped: false, incense: false, cord: false });
   const shrinesStamped = new Set(goshuinList.map((g) => g.shrineId)).size;
@@ -275,12 +279,35 @@ export default function App() {
   useBackLayer(viewMode === 'explore', handleReturnToMap);
   useBackLayer(inLegend, () => sceneInstanceRef.current?.leaveLegend());
 
+  // Temizu: done in first person at this shrine's own basin, in the 3D scene
+  const startTemizu = () => {
+    const s = sceneInstanceRef.current;
+    if (!s) return;
+    setActiveModal(null);
+    temizuDone.current = false;
+    const ok = s.startTemizu((st) => {
+      setTemizu(st);
+      if (st.done && !temizuDone.current) {
+        temizuDone.current = true;
+        visit.current.purified = true;
+        handleRitualProgress('temizuya');
+      }
+    });
+    if (ok) setInTemizu(true);
+  };
+  const leaveTemizu = () => {
+    sceneInstanceRef.current?.endTemizu();
+    setInTemizu(false);
+    setTemizu(null);
+  };
+  const holdTemizu = useCallback((on: boolean) => sceneInstanceRef.current?.setTemizuHolding(on), []);
+
   // Interactive Spot Trigger (e.g. Press 'E' or Tap button)
   const handleInteractWithSpot = () => {
     if (!nearbySpot) return;
 
     if (nearbySpot.type === 'temizuya') {
-      setActiveModal('temizuya');
+      startTemizu();
     } else if (nearbySpot.type === 'haiden') {
       setActiveModal('saisen');
     } else if (nearbySpot.type === 'omikuji') {
@@ -359,7 +386,7 @@ export default function App() {
           {/* Top Left Minimal Header & Map Back Button (Unobtrusive & Beige Theme) */}
           <div className="fixed top-3 left-3 sm:top-4 sm:left-4 z-30 flex items-center gap-2 pointer-events-auto min-w-0">
             <button
-              onClick={() => (inLegend ? sceneInstanceRef.current?.leaveLegend() : handleReturnToMap())}
+              onClick={() => (inTemizu ? leaveTemizu() : inLegend ? sceneInstanceRef.current?.leaveLegend() : handleReturnToMap())}
               className="flex items-center gap-1.5 pl-2.5 pr-3.5 py-2 rounded-xl bg-[#fbf8f0]/95 hover:bg-[#f3ebd7] text-[#2c241c] border border-[#d8cabb] text-xs font-semibold transition-all shadow-md hover:border-[#b45309] cursor-pointer"
               title={inLegend ? 'Back to the shrine (Esc)' : 'Back to the map (Esc)'}
               aria-label={inLegend ? 'Back to the shrine' : 'Back to the map'}
@@ -419,7 +446,7 @@ export default function App() {
           </div>
 
           {/* Consolidated Collapsible Bottom Dock (Zero Viewport Occlusion) */}
-          {!inLegend && (
+          {!inLegend && !inTemizu && (
           <ControlDock
             shrine={currentShrine}
             timeOfDay={timeOfDay}
@@ -427,7 +454,7 @@ export default function App() {
             isCinematic={isCinematic}
             onToggleCinematic={handleToggleCinematic}
             onTeleport={handleTeleport}
-            onOpenTemizuya={() => setActiveModal('temizuya')}
+            onOpenTemizuya={startTemizu}
             onOpenSaisen={() => setActiveModal('saisen')}
             onOpenOmikuji={() => setActiveModal('omikuji')}
             onOpenEma={() => setActiveModal('ema')}
@@ -474,20 +501,12 @@ export default function App() {
           )}
 
           {/* Virtual Touch Joystick for Mobile / Tablets */}
-          <VirtualJoystick onMove={handleJoystickMove} />
+          {!inTemizu && <VirtualJoystick onMove={handleJoystickMove} />}
+          {inTemizu && <TemizuHud state={temizu} onHold={holdTemizu} onLeave={leaveTemizu} river={currentShrine.id === 'ise-jingu'} />}
         </>
       )}
 
       {/* 3. Interactive Ritual Modals */}
-      {activeModal === 'temizuya' && (
-        <TemizuyaModal
-          onClose={() => setActiveModal(null)}
-          onPurified={() => {
-            visit.current.purified = true;
-            handleRitualProgress('temizuya');
-          }}
-        />
-      )}
 
       {activeModal === 'saisen' && (
         <SaisenWorshipModal
@@ -595,7 +614,7 @@ export default function App() {
             });
           }}
           onQuickAction={(ritualType) => {
-            if (ritualType === 'temizuya') setActiveModal('temizuya');
+            if (ritualType === 'temizuya') startTemizu();
             else if (ritualType === 'saisen') setActiveModal('saisen');
             else if (ritualType === 'omikuji') setActiveModal('omikuji');
             else if (ritualType === 'ema') setActiveModal('ema');
